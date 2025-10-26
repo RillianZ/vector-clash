@@ -11,10 +11,8 @@ void Enemy::Respawn(int inScreenWidth, int inScreenHeight)
 
 void Enemy::Update(Vector2D inTargetPosition)
 {
-	
 }
 
 void Enemy::Draw()
 {
-	
 }

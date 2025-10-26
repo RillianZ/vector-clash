@@ -141,19 +141,20 @@
     <None Include="Makefile" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GameManager.cpp" />
-    <ClCompile Include="MapGenerator.cpp" />
+    <ClCompile Include="src\GameManager.cpp" />
+    <ClCompile Include="src\MapGenerator.cpp" />
     <ClCompile Include="src\Enemy.cpp" />
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\Player.cpp" />
+    <ClCompile Include="src\mPlayer.cpp" />
     <ClCompile Include="src\PowerUp.cpp" />
     <ClCompile Include="src\Vector2D.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GameManager.h" />
-    <ClInclude Include="MapGenerator.h" />
+    <ClInclude Include="src\GameManager.h" />
+    <ClInclude Include="src\MapGenerator.h" />
     <ClInclude Include="src\Enemy.h" />
-    <ClInclude Include="src\Player.h" />
+    <ClInclude Include="src\ITailOwner.h" />
+    <ClInclude Include="src\mPlayer.h" />
     <ClInclude Include="src\PowerUp.h" />
     <ClInclude Include="src\Vector2D.h" />
   </ItemGroup>

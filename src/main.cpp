@@ -1,16 +1,9 @@
 #include <raylib.h>
-#include <string>
-#include <iostream>
-#include <vector>
-#include "Vector2D.h"
-#include "Player.h"
-#include "Enemy.h"
-
-using namespace std;
+#include "GameManager.h"
 
 /*
 * README---------------------------------------------------
-The goal of this project is to create a game that is a mix of Snake and Troncycles, it must have good use of classes. 
+The goal of this project is to create a game that is a mix of Snake and Troncycles, it must have good use of classes.
 
 And needs to show of math that can be used to perform basic vector operations such as addition,
 subtraction, scalar multiplication, and magnitude calculation.
@@ -19,75 +12,70 @@ I need to make sure they all have good naming, good commenting, and that the cla
 
 It should also output to the console the results of the operations performed on the vectors. For Debugging
 
-The main planned classes are 
-Player, Enemy, Powerups, Math/Vector2D, A game manager, map editor
-The rest of the calculations goes into the main
+The main planned classes are
+Player, (mostly done)
+Enemy, (not started yet)
+Powerups, (not started yet)
+Math/Vector2D, (need to update my classes to use Vector2D for  the exam)
+A game manager, (Started on this one)
+map editor (NOT IMPLEMENTED YET)
+The Main cpp file to run the game loop (mostly done)
 
-There are 2 stages to start with, (more to be added later?) 
-The first stage is just wall boundaries, 
-the second has some obstacles in the center of the screen.
+There are 2 stages to start with, (more to be added later?)
+The first stage is just wall boundaries,
+The Map editor will be used to create stage 2 which has some obstacles in the center of the screen.
 
-There are 3 powerups to start with (one with a twist) (more to be added later?) 
-Speedup/down, Split tail(Allows collison with tail to cut of the tail), and ghost mode (collison off for a few seconds)
+There are 3 powerups to start with (one with a twist) (more to be added later?)
+Speedup/down, 
+Split tail(Allows collison with tail to cut of the tail), 
+and ghost mode (collison off for a few seconds)
 All powerups are just simple different colored rectangles
 
-There are 3 "Bikes"/Players to start with, (More to be added later?)
-Viper(Normal) Bruiser(Slow and grows fast), Ghost(Fast and grows slow)
-
+Player Class:
 It should have a dynamic growing tail for the player
 The player moves in 2 directions left and right
 the Tail follows the player object
 
-Collison checks on tail, walls, and powerups
+There are 3 "Bikes"/Players to start with, (More to be added later?)
+Viper(Normal)
+Bruiser(Slow and grows fast),
+Ghost(Fast and grows slow)
+
+Collison checks on tail, walls, and powerups (mostly done for tail and walls, powerups not started yet)
 
 First i will make and test the player and the movement and tail, then add the powerups, then the enemies, then the stages, scoring , and finally polish
+
+Currently i need to go over Itailowner and make sure i understand virtual classes and how they work
+I also need to make sure i understand how the collision detection is working in gamemanager
+I also need to make sure i understand how the tail is being drawn and stored in mplayer
+I also need to understand deques at all!
+How does AUTO work???
 
 README END------------------------------------------------
 
 */
 
-//Global variables
-Vector2D Test = { 1.f, 0.f };
-
 int main()
 {
-	//Screen Setup...
-	int screenWidth = 1280;
-	int screenHeight = 1024;
+    int screenWidth = 1280;
+    int screenHeight = 1024;
 
-	float halfScreenWidth = (float)(screenWidth / 2);
-	float halfScreenHeight = (float)(screenHeight / 2);
+    InitWindow(screenWidth, screenHeight, "Vector Clash");
+    SetTargetFPS(60);
 
-	// Player Setup
-	//Needs to change placing based on amount of active players
-	Player player;
-	player.position = { halfScreenWidth, halfScreenHeight };
+    GameManager gm(screenWidth, screenHeight);
 
-	//Powerups
-	//After PLAYER
-	
-	// Enemy Setup
-	//AFTER PLAYER!
+    while (!WindowShouldClose())
+    {
+        float dt = GetFrameTime();
+        gm.Update(dt);
 
-	//Window setup
-	InitWindow(screenWidth, screenHeight, "Vector Clash");
-	SetTargetFPS(60);
+        BeginDrawing();
+        ClearBackground(BLACK);
+        gm.Draw();
+        EndDrawing();
+    }
 
-	while (!WindowShouldClose())
-	{
-		// Update
-		player.Move();
-
-		// Drawing
-		BeginDrawing();
-		ClearBackground(BLACK);
-		player.Draw(Test);
-
-		
-
-		EndDrawing();
-	}
-
-	CloseWindow();
-	return 0;
+    CloseWindow();
+    return 0;
 }
