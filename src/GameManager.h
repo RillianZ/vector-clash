@@ -8,38 +8,53 @@
 class GameManager
 {
 public:
-    GameManager(int screenWidth, int screenHeight);
+	GameManager(int screenWidth, int screenHeight);
 
-    // Update game state (call every frame with dt)
-    void Update(float dt);
+	// Update game state (call every frame with dt)
+	void Update(float dt);
 
-    // Draw current game state (call between BeginDrawing/EndDrawing)
-    void Draw();
+	// Draw current game state (call between BeginDrawing/EndDrawing)
+	void Draw();
 
-    // Reset players / restart match
-    void ResetPlayers();
+	private:
+	int screenWidth_;
+	int screenHeight_;
+	float halfScreenWidth_;
+	float halfScreenHeight_;
 
-private:
-    int screenWidth_;
-    int screenHeight_;
-    float halfScreenWidth_;
-    float halfScreenHeight_;
+	// spawn invulnerability window after reset
+	float spawnInvulnerableSeconds_;
+	float spawnInvulnerableTimer_;
 
-    // spawn invulnerability window after reset
-    float spawnInvulnerableSeconds_;
-    float spawnInvulnerableTimer_;
+	enum class State { Menu, Running, GameOver };
+	State state_;
 
-    enum class State { Running, GameOver };
-    State state_;
-    int winner_; // 0 none/draw, 1 player1, 2 player2
+	//number of players selected
+	int selectedPlayers_; 
 
-    // Two players for prototype; later make a container or factory
-    mPlayer playerOne_;
-    mPlayer playerTwo_;
+	//resets players based on player count
+	void ResetPlayers(int playerCount); 
 
-    // Tail owners list for generic collision checks
-    std::vector<ITailOwner*> owners_;
+	//sets winner
+	int winner_; 
 
-    // internal routines
-    bool CheckHeadAgainstAllTails(ITailOwner* subject);
+	// number of players at start of current match (used for game-over rules)
+	int initialPlayerCount_; 
+	
+	// Solo mode tracking
+	float bestSoloTailLength_;
+
+	// Players constructed here
+	mPlayer playerOne_;
+	mPlayer playerTwo_;
+	mPlayer playerThree_;
+	mPlayer playerFour_;
+
+	// Tail owners list for generic collision checks
+	//This vector holds pointers to ITailOwner objects, which represent entities with tails in the game.
+	//i do not know why we use pointers here and need to look into itailowner more
+	std::vector<ITailOwner*> owners_;
+
+	// internal routines
+	bool CheckHeadAgainstAllTails(ITailOwner* subject);
 };

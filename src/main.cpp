@@ -26,8 +26,8 @@ The first stage is just wall boundaries,
 The Map editor will be used to create stage 2 which has some obstacles in the center of the screen.
 
 There are 3 powerups to start with (one with a twist) (more to be added later?)
-Speedup/down, 
-Split tail(Allows collison with tail to cut of the tail), 
+Speedup/down,
+Split tail(Allows collison with tail to cut of the tail),
 and ghost mode (collison off for a few seconds)
 All powerups are just simple different colored rectangles
 
@@ -57,25 +57,26 @@ README END------------------------------------------------
 
 int main()
 {
-    int screenWidth = 1280;
-    int screenHeight = 1024;
+	int screenWidth = 1280;
+	int screenHeight = 1024;
 
-    InitWindow(screenWidth, screenHeight, "Vector Clash");
-    SetTargetFPS(60);
+	InitWindow(screenWidth, screenHeight, "Vector Clash");
+	SetTargetFPS(60);
 
-    GameManager gm(screenWidth, screenHeight);
+	GameManager gm(screenWidth, screenHeight);
 
-    while (!WindowShouldClose())
-    {
-        float dt = GetFrameTime();
-        gm.Update(dt);
+	while (!WindowShouldClose())
+	{
 
-        BeginDrawing();
-        ClearBackground(BLACK);
-        gm.Draw();
-        EndDrawing();
-    }
+		float dt = GetFrameTime();
+		gm.Update(dt);
 
-    CloseWindow();
-    return 0;
+		BeginDrawing();
+		ClearBackground(BLACK);
+		gm.Draw();
+		EndDrawing();
+	}
+
+	CloseWindow();
+	return 0;
 }

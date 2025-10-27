@@ -22,6 +22,12 @@ public:
 	Vector2 GetSize() const override;
 	const std::deque<Vector2>& GetTailSegments() const override;
 	bool IsAlive() const override;
+	float GetTailPixelLength() const override;
+
+	// Lifecycle hooks (used by GameManager)
+	void OwnerUpdate(float deltaTime) override; // calls input+update
+	void OwnerDraw() override;                  // draws tail + head
+	void OwnerKill() override;                  // calls mPKill()
 
 	// Other publicly available utilities
 	void CutTrail(size_t cutIndex);

@@ -3,22 +3,22 @@
 
 //Constructor implement
 mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotationSpeed, Color pColor, int pKeyLeft, int pKeyRight)
-	: 
-	m_position(pStartPos),
-	m_size(pSize),
-	m_speed(pSpeed),
-	m_rotationSpeed(pRotationSpeed),
-	m_directionAngle(90.0f), 
-	m_color(pColor),
-	m_isAlive(true),
+	:
+	m_position(pStartPos), // starting position
+	m_size(pSize), // size of head
+	m_speed(pSpeed), // pixels per second
+	m_rotationSpeed(pRotationSpeed), // degrees per second rotate
+	m_directionAngle(90.0f), // facing down initially
+	m_color(pColor), // default color
+	m_isAlive(true), // player starts alive
 	m_tailLengthPixels(200.0f),     // default total tail length in pixels
 	m_trailSampleDistance(3.0f),    // default min spacing between stored points
-	m_maxTrailPoints(0),
-	m_tailGrowthEnabled(true),
+	m_maxTrailPoints(0), // this will be computed below in ctor body
+	m_tailGrowthEnabled(true),   // tail grows continuously by default
 	m_growthRatePixelsPerSecond(40.0f),      // pixels per second when continuous
-	m_keyLeft(pKeyLeft),
-	m_keyRight(pKeyRight)
-{	
+	m_keyLeft(pKeyLeft), //Standard key for left movement
+	m_keyRight(pKeyRight) //Standard key for right movement
+{
 	m_maxTrailPoints = static_cast<size_t>(m_tailLengthPixels / m_trailSampleDistance);
 	if (m_maxTrailPoints < 2) m_maxTrailPoints = 2; // Ensure at least 2 points
 	m_trail.clear();
@@ -48,12 +48,14 @@ void mPlayer::Reset(Vector2 pStartPos, int pKeyLeft, int pKeyRight, float pStart
 	m_trail.push_back(m_position);
 }
 
+//sets the control keys for the player
 void mPlayer::SetControlKeys(int leftKey, int rightKey)
 {
 	m_keyLeft = leftKey;
 	m_keyRight = rightKey;
 }
 
+// Sets the total tail length in pixels
 void mPlayer::SetTailLength(float pixels)
 {
 	if (pixels <= 0.0f) return;
@@ -66,17 +68,20 @@ void mPlayer::SetTailLength(float pixels)
 		m_trail.pop_front();
 }
 
+// Enables or disables continuous tail growth
 void mPlayer::SetTailGrowthEnabled(bool enabled)
 {
 	m_tailGrowthEnabled = enabled;
 }
 
+// Sets the continuous tail growth rate in pixels per second
 void mPlayer::SetTailGrowthRate(float pixelsPerSecond)
 {
 	if (pixelsPerSecond >= 0.0f)
 		m_growthRatePixelsPerSecond = pixelsPerSecond;
 }
 
+//Handles player input for rotation
 void mPlayer::mPHandleInput(float deltaTime)
 {
 	// Use per-instance keys if set; otherwise defaults KEY_LEFT/KEY_RIGHT
@@ -91,11 +96,14 @@ void mPlayer::mPHandleInput(float deltaTime)
 	}
 }
 
+//Updates the player position and trail
+// look into this since it now uses dequeue which i am not familar with
 void mPlayer::mPUpdate(float deltaTime)
 {
 	if (!m_isAlive) return;
 
 	// 1. Calculate the normalized direction vector from the angle
+	//Update this to use Vector2D
 	float angleRad = m_directionAngle * DEG2RAD;
 	Vector2 direction = { cosf(angleRad), sinf(angleRad) };
 
@@ -156,6 +164,30 @@ void mPlayer::mPDraw()
 	Vector2 origin = { m_size.x / 2.0f, m_size.y / 2.0f };
 	DrawRectanglePro(rec, origin, m_directionAngle, m_color);
 }
+
+// Lifecycle hooks (ITailOwner)
+void mPlayer::OwnerUpdate(float deltaTime)
+{
+	// combine input + update so managers can call one method
+	mPHandleInput(deltaTime);
+	mPUpdate(deltaTime);
+}
+
+void mPlayer::OwnerDraw()
+{
+	mPDraw();
+}
+
+void mPlayer::OwnerKill()
+{
+	mPKill();
+}
+
+float mPlayer::GetTailPixelLength() const
+{
+return m_tailLengthPixels;
+}
+
 
 // Simple accessors and utilities used by main collision logic
 Vector2 mPlayer::GetPosition() const
