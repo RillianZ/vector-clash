@@ -10,7 +10,7 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, screenHeight_(screenHeight)
 	, halfScreenWidth_((float)screenWidth / 2.0f)
 	, halfScreenHeight_((float)screenHeight / 2.0f)
-	, spawnInvulnerableSeconds_(3.0f) // increase this to avoid instant self-hits at spawn
+	, spawnInvulnerableSeconds_(1.f) // increase this to avoid instant self-hits at spawn
 	, spawnInvulnerableTimer_(0.0f)
 	, state_(State::Menu)
 	, selectedPlayers_(2) //default to 2 players

@@ -3,7 +3,7 @@
 #include <iostream>
 #include <deque>
 #include "Vector2D.h"
-#include "raylib.h"
+#include <raylib.h>
 #include "ITailOwner.h"
 
 class mPlayer : public ITailOwner

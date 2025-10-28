@@ -1,4 +1,4 @@
-#include "raylib.h"
+#include <raylib.h>
 #include "GameManager.h"
 
 /*
@@ -16,8 +16,10 @@ The main planned classes are
 Player, (mostly done)
 Enemy, (not started yet)
 Powerups, (not started yet)
+the powerup class will have a base class that changes the players stats on pickup and derived classes for each powerup type
+
 Math/Vector2D, (need to update my classes to use Vector2D for  the exam)
-A game manager, (Started on this one)
+A game manager, controls all functions and updates and similar. (Started on this one)
 map editor (NOT IMPLEMENTED YET)
 The Main cpp file to run the game loop (mostly done)
 
