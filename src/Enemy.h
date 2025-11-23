@@ -43,6 +43,5 @@ private:
 	Vector2 size_;
 	bool isAlive_;
 
-	float timeSinceLastTailDrop_;
-	float tailDropInterval_;
+	
 };
