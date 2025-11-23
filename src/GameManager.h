@@ -4,6 +4,7 @@
 #include "mPlayer.h"
 #include "ITailOwner.h"
 #include <raylib.h>
+#include "Enemy.h"
 
 class GameManager
 {
@@ -49,10 +50,17 @@ private:
 	mPlayer playerTwo_;
 	mPlayer playerThree_;
 	mPlayer playerFour_;
+	Enemy enemyOne_;
+
+	// Previous frame player position for collision checks
+	Vector2 previousPlayerPos_;
+
+	// Respawn logic
+	float enemyRespawnTimer_;
+	// Time delay before enemy respawns after being killed
+	const float enemyRespawnDelay_ = 1.0f;
 
 	// Tail owners list for generic collision checks
-	//This vector holds pointers to ITailOwner objects, which represent entities with tails in the game.
-	//i do not know why we use pointers here and need to look into itailowner more
 	std::vector<ITailOwner*> owners_;
 
 	// internal routines

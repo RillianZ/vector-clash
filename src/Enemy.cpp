@@ -1,7 +1,7 @@
 #include "Enemy.h"
 #include <cmath>
 
-Enemy::Enemy(Vector2 startPos, float speed, Color color)
+Enemy::Enemy(Vector2 startPos, Vector2 size, float speed, Color color)
 	: position_({ startPos.x, startPos.y })
 	, speed_(speed)
 	, color_(color)
@@ -9,7 +9,7 @@ Enemy::Enemy(Vector2 startPos, float speed, Color color)
 	, isAlive_(true)
 	, currentTarget_({ 0, 0 })
 	, timeSinceLastTailDrop_(0.0f)
-	, tailDropInterval_(0.1f)
+	, tailDropInterval_(0.02f)
 {
 }
 
@@ -17,6 +17,15 @@ void Enemy::SetTarget(Vector2 targetPos)
 {
 	// Convert Raylib target to your math class
 	currentTarget_ = { targetPos.x, targetPos.y };
+}
+
+void Enemy::Reset(Vector2 startPos)
+{
+	// Reset Logic using your Vector2D class
+	position_ = { startPos.x, startPos.y };
+	tailSegments_.clear();
+	isAlive_ = true;
+	timeSinceLastTailDrop_ = 0.0f;
 }
 
 void Enemy::OwnerUpdate(float dt)
@@ -40,11 +49,11 @@ void Enemy::OwnerUpdate(float dt)
 	if (timeSinceLastTailDrop_ >= tailDropInterval_)
 	{
 		// Convert your Vector2D back to Raylib Vector2 for the interface deque
-		tailSegments_.push_front({ position_.x, position_.y });
+		tailSegments_.push_back({ position_.x, position_.y });
 
-		if (tailSegments_.size() > 100) // Cap tail length
+		if (tailSegments_.size() > 3000) // Cap tail length
 		{
-			tailSegments_.pop_back();
+			tailSegments_.pop_front();
 		}
 		timeSinceLastTailDrop_ = 0.0f;
 	}

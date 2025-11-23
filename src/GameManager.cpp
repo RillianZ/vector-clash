@@ -4,6 +4,7 @@
 #include <string>
 #include "Vector2D.h"
 
+
 GameManager::GameManager(int screenWidth, int screenHeight)
 	: screenWidth_(screenWidth)
 	, screenHeight_(screenHeight)
@@ -17,9 +18,10 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, bestSoloTailLength_(0.0f)
 	// placeholder positions for reset
 	, playerOne_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, RED)
-	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, BLUE, KEY_A, KEY_D)
+	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, ORANGE, KEY_A, KEY_D)
 	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, GREEN, KEY_J, KEY_L)
 	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, YELLOW, KEY_F, KEY_H)
+	, enemyOne_({ 0, 0 }, { 10.0f, 10.0f }, 285.0f, BLUE)
 {
 	// initialize players and owners according to selectedPlayers_
 	ResetPlayers(selectedPlayers_);
@@ -38,14 +40,33 @@ void GameManager::ResetPlayers(int playerCount)
 	spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
 	winner_ = 0;
 
+	// Resets Respawn timer
+	enemyRespawnTimer_ = enemyRespawnDelay_;
+
+	// Resets Tracking
+	previousPlayerPos_ = playerOne_.GetPosition();
+
 	// ensure owners list points are valid (we keep object addresses stable)
 	owners_.clear();
-	if (playerCount >= 1) owners_.push_back(&playerOne_);
-	if (playerCount >= 2) owners_.push_back(&playerTwo_);
-	if (playerCount >= 3) owners_.push_back(&playerThree_);
-	if (playerCount >= 4) owners_.push_back(&playerFour_);
 
-	// remember how many players were active at start of the match
+	// ALWAYS add Player 1
+	if (playerCount >= 1) owners_.push_back(&playerOne_);
+
+	// If singeplayer add enemy
+	if (playerCount == 1)
+	{
+		// Spawn enemy on the opposite side of the screen from Player 1
+		enemyOne_.Reset({ halfScreenWidth_ + sep, halfScreenHeight_ });
+		owners_.push_back(&enemyOne_);
+	}
+	// IF MULTIPLAYER: Add other human players
+	else
+	{
+		if (playerCount >= 2) owners_.push_back(&playerTwo_);
+		if (playerCount >= 3) owners_.push_back(&playerThree_);
+		if (playerCount >= 4) owners_.push_back(&playerFour_);
+	}
+
 	initialPlayerCount_ = playerCount;
 }
 
@@ -155,6 +176,55 @@ void GameManager::Update(float dt)
 	}
 	if (state_ == State::Running)
 	{
+		if (selectedPlayers_ == 1)
+		{
+			// 1. RESPAWN LOGIC
+			if (!enemyOne_.IsAlive())
+			{
+				enemyRespawnTimer_ -= dt;
+				if (enemyRespawnTimer_ <= 0.0f)
+				{
+					// Pick a spot randomly not to close to player
+					Vector2 spawnPos;
+					do {
+						spawnPos = { (float)GetRandomValue(50, screenWidth_ - 50),
+									 (float)GetRandomValue(50, screenHeight_ - 50) };
+					} while (Vector2Distance(spawnPos, playerOne_.GetPosition()) < 400.0f); //distance in pixels
+
+					enemyOne_.Reset(spawnPos);
+					enemyRespawnTimer_ = enemyRespawnDelay_;
+				}
+			}
+			// 2. MOVEMENT PREDICTION LOGIC
+			else if (playerOne_.IsAlive())
+			{
+				// Convert positions to Vector2D for math
+				Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
+				Vector2D prevPosVec = { previousPlayerPos_.x, previousPlayerPos_.y };
+
+				Vector2D velocity = prevPosVec.VectorTowardsTarget(currPosVec);
+
+				// Adjust this to aim further ahead or closer
+				// We use ScaleVector to multiply the movement vector
+				Vector2D aimOffset = velocity.ScaleVector(45.0f);
+
+				// Calculate the predicted point
+				Vector2D predictedPoint = currPosVec.SetVectorOffset(aimOffset);
+
+				// Apply target
+				// We convert back to Raylib Vector2 just to pass it to SetTarget
+				enemyOne_.SetTarget({ predictedPoint.x, predictedPoint.y });
+			}
+			else
+			{
+				// When the Player is dead, enemy returns to center
+				enemyOne_.SetTarget({ halfScreenWidth_, halfScreenHeight_ });
+			}
+
+			// Update previous position for the next frame's calculation
+			previousPlayerPos_ = playerOne_.GetPosition();
+
+		}
 		// update only active owners
 		for (ITailOwner* o : owners_) o->OwnerUpdate(dt);
 
@@ -175,6 +245,8 @@ void GameManager::Update(float dt)
 				}
 			}
 		}
+
+		
 
 		// determine game over by counting alive owners
 		{
@@ -206,7 +278,7 @@ void GameManager::Update(float dt)
 				state_ = State::GameOver;
 				if (aliveCount == 1 && lastAlive != nullptr)
 				{
-					// find index in owners_ to set winner_ (owner ordering maps to player numbers)
+					// checks index for winner
 					int idx = -1;
 					for (size_t i = 0; i < owners_.size(); ++i)
 					{

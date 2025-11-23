@@ -10,7 +10,7 @@
 class Enemy : public ITailOwner
 {
 public:
-	Enemy(Vector2 startPos, float speed, Color color);
+	Enemy(Vector2 startPos, Vector2 size, float speed, Color color);
 
 	// --- ITailOwner Interface Implementation ---
 	virtual void OwnerUpdate(float dt) override;
@@ -22,6 +22,10 @@ public:
 	virtual Vector2 GetSize() const override;
 	virtual const std::deque<Vector2>& GetTailSegments() const override;
 	virtual float GetTailPixelLength() const override;
+
+	// Reset enemy to initial state
+	void Reset(Vector2 startPos);
+
 
 	// --- Enemy Specific Methods ---
 	void SetTarget(Vector2 targetPos);
