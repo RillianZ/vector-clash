@@ -2,8 +2,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <string>
-
-// setting up the GameManager class
+#include "Vector2D.h"
 
 GameManager::GameManager(int screenWidth, int screenHeight)
 	: screenWidth_(screenWidth)
@@ -35,7 +34,7 @@ void GameManager::ResetPlayers(int playerCount)
 	playerThree_.Reset({ halfScreenWidth_, halfScreenHeight_ - sep }, KEY_J, KEY_L, 90.0f);
 	playerFour_.Reset({ halfScreenWidth_, halfScreenHeight_ + sep }, KEY_F, KEY_H, 270.0f);
 
-	// reset invulnerability timer and winner 
+	// reset invulnerability timer and winner
 	spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
 	winner_ = 0;
 
@@ -46,7 +45,6 @@ void GameManager::ResetPlayers(int playerCount)
 	if (playerCount >= 3) owners_.push_back(&playerThree_);
 	if (playerCount >= 4) owners_.push_back(&playerFour_);
 
-	if (playerCount == 1) bestSoloTailLength_ = 0.0f;
 	// remember how many players were active at start of the match
 	initialPlayerCount_ = playerCount;
 }
@@ -57,12 +55,13 @@ bool GameManager::CheckHeadAgainstAllTails(ITailOwner* subject)
 
 	// mPlayer stores position as the head center (DrawRectanglePro was used with origin=center).
 	// Treat GetPosition() as the head center (not top-left).
-	Vector2 headCenter = subject->GetPosition();
+	Vector2 headCenterRay = subject->GetPosition();
 	Vector2 headSize = subject->GetSize();
+	Vector2D headVec = { headCenterRay.x, headCenterRay.y };
 	float headRadius = std::max(headSize.x, headSize.y) * 0.5f;
 
 	// bounds: head outside screen -> collision
-	if (headCenter.x < 0.0f || headCenter.x > screenWidth_ || headCenter.y < 0.0f || headCenter.y > screenHeight_)
+	if (headVec.x < 0.0f || headVec.x > screenWidth_ || headVec.y < 0.0f || headVec.y > screenHeight_)
 	{
 		return true;
 	}
@@ -79,24 +78,26 @@ bool GameManager::CheckHeadAgainstAllTails(ITailOwner* subject)
 		if (tail.empty()) continue;
 
 		// Owner position is stored as center as well
-		Vector2 ownerCenter = owner->GetPosition();
+		// Using Vector2D for distance calc
+		Vector2 ownerCenterRay = owner->GetPosition();
+		Vector2D ownerVec = { ownerCenterRay.x, ownerCenterRay.y };
 		Vector2 ownerSize = owner->GetSize();
 
 		// compute tail extent so broadphase includes long tails
 		// this is the max distance from owner center to any tail segment
 		// (used to avoid checking distant tails)
-		float tailExtentSq = 0.0f;
+		float tailExtent = 0.0f;
 		for (const auto& seg : tail)
 		{
+			Vector2D segVec = { seg.x, seg.y };
 			// trail samples are stored as centers (mPlayer pushes m_position which is center)
-			float d2 = Vector2DistanceSqr(ownerCenter, seg);
-			if (d2 > tailExtentSq) tailExtentSq = d2;
+			float d = ownerVec.DistanceToTarget(segVec);
+			if (d > tailExtent) tailExtent = d;
 		}
-		float tailExtent = sqrtf(tailExtentSq);
 
 		float ownerRadius = std::max(ownerSize.x, ownerSize.y) * 0.5f;
 		float broadDist = headRadius + ownerRadius + tailExtent + 1.0f;
-		if (Vector2DistanceSqr(headCenter, ownerCenter) > broadDist * broadDist) continue;
+		if (headVec.DistanceToTarget(ownerVec) > broadDist) continue;
 
 		// self-collision: skip a small number of the most-recent samples that are
 		// guaranteed to be very near the head (prevents instant spawn death).
@@ -116,13 +117,13 @@ bool GameManager::CheckHeadAgainstAllTails(ITailOwner* subject)
 
 		for (size_t i = startIndex; i < endIndex; ++i)
 		{
-			// tail samples are centers 
-			Vector2 seg = tail[i];
-			float dx = headCenter.x - seg.x;
-			float dy = headCenter.y - seg.y;
-			float distSq = dx * dx + dy * dy;
-			float collisionDist = headRadius + std::max(ownerSize.x, ownerSize.y) * 0.5f;
-			if (distSq < collisionDist * collisionDist)
+			// tail samples are centers
+			// Using Vector2D for distance calc
+			Vector2D segVec = { tail[i].x, tail[i].y };
+			float actualDistance = headVec.DistanceToTarget(segVec);
+			float collisionThreshold = headRadius + std::max(ownerSize.x, ownerSize.y) * 0.5f;
+
+			if (actualDistance < collisionThreshold)
 			{
 				return true;
 			}
@@ -286,25 +287,25 @@ void GameManager::Draw()
 	if (state_ == State::GameOver)
 	{
 		if (selectedPlayers_ == 1)
-			{
+		{
 			float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
 			std::string msg = "Solo run finished";
 			int fontSize = 40;
 			int textWidth = MeasureText(msg.c_str(), fontSize);
 			DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 80, fontSize, RAYWHITE);
-			
+
 			char buf[128];
 			snprintf(buf, sizeof(buf), "Your tail: %.0f px", finalLen);
 			DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 20, 30, RAYWHITE);
-			
+
 			snprintf(buf, sizeof(buf), "Best: %.0f px", bestSoloTailLength_);
 			DrawText(buf, (screenWidth_ - MeasureText(buf, 24)) / 2, screenHeight_ / 2 + 20, 24, LIGHTGRAY);
-			
+
 			std::string hint = "Space = Retry, Enter = Menu";
 			int hintSize = 20;
 			int hintW = MeasureText(hint.c_str(), hintSize);
 			DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 60, hintSize, LIGHTGRAY);
-			}
+		}
 		else
 		{
 			std::string msg;

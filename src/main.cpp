@@ -13,7 +13,7 @@ I need to make sure they all have good naming, good commenting, and that the cla
 It should also output to the console the results of the operations performed on the vectors. For Debugging
 
 The main planned classes are
-Player, (mostly done) 
+Player, (mostly done)
 Enemy, (not started yet)
 Powerups, (not started yet)
 the powerup class will have a base class that changes the players stats on pickup and derived classes for each powerup type
@@ -45,10 +45,7 @@ Ghost(Fast and grows slow)
 
 Collison checks on tail, walls, and powerups (mostly done for tail and walls, powerups not started yet)
 
-First i will make and test the player and the movement and tail, then add the powerups, then the enemies, then the stages, scoring , and finally polish
-
-Currently i need to go over Itailowner and make sure i understand virtual classes and how they work
-I also need to make sure i understand how the tail is being drawn and stored in mplayer
+I need to add the powerups, The different player types,  then the enemy in single player, then the map generator, scoring needs to be updated for solo play , and finally polish
 
 README END------------------------------------------------
 
@@ -66,7 +63,6 @@ int main()
 
 	while (!WindowShouldClose())
 	{
-
 		float dt = GetFrameTime();
 		gm.Update(dt);
 

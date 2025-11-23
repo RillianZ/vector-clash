@@ -185,9 +185,8 @@ void mPlayer::OwnerKill()
 
 float mPlayer::GetTailPixelLength() const
 {
-return m_tailLengthPixels;
+	return m_tailLengthPixels;
 }
-
 
 // Simple accessors and utilities used by main collision logic
 Vector2 mPlayer::GetPosition() const

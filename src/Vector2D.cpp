@@ -1,7 +1,8 @@
 #include "Vector2D.h"
 
-//This whole class is used for math and calculations, will comment on what each individual function does in here later
-//Made by PK
+//This whole class is used for math and calculations
+
+//calculates the magnitude of the vector
 float Vector2D::CalculateMagnitude()
 {
 	float magnitudeSquared = x * x + y * y;
@@ -9,6 +10,7 @@ float Vector2D::CalculateMagnitude()
 	return magnitude;
 }
 
+//adds two vectors together and returns the result
 Vector2D Vector2D::SetVectorOffset(Vector2D inVectorToAdd)
 {
 	float outVectorX = x + inVectorToAdd.x;
@@ -18,6 +20,7 @@ Vector2D Vector2D::SetVectorOffset(Vector2D inVectorToAdd)
 	return outVector;
 }
 
+//scales the vector by a scalar value
 Vector2D Vector2D::ScaleVector(float inScalar)
 {
 	float scaledXVector = x * inScalar;
@@ -27,6 +30,7 @@ Vector2D Vector2D::ScaleVector(float inScalar)
 	return scaledVector;
 }
 
+//calculates the vector pointing towards a target vector
 Vector2D Vector2D::VectorTowardsTarget(Vector2D inTargetVector)
 {
 	float targetedXVector = inTargetVector.x - x;
@@ -36,6 +40,7 @@ Vector2D Vector2D::VectorTowardsTarget(Vector2D inTargetVector)
 	return targetedVector;
 }
 
+//calculates the distance to a target vector
 float Vector2D::DistanceToTarget(Vector2D inTargetedVector)
 {
 	Vector2D targetedVector = VectorTowardsTarget(inTargetedVector);
@@ -44,6 +49,7 @@ float Vector2D::DistanceToTarget(Vector2D inTargetedVector)
 	return distanceToTargetedVector;
 }
 
+//normalizes the vector aka makes its magnitude 1
 Vector2D Vector2D::NormalizeVector()
 {
 	if (CalculateMagnitude() == 0)
@@ -58,6 +64,7 @@ Vector2D Vector2D::NormalizeVector()
 	return normalizedVector;
 }
 
+//generates a cosine movement pattern based on center, amplitude, and angle
 Vector2D Vector2D::CosineMovement(Vector2D inCenter, float inAmplitude, float inAngle)
 {
 	float x = inCenter.x + inAmplitude * cosf(inAngle);
@@ -66,6 +73,7 @@ Vector2D Vector2D::CosineMovement(Vector2D inCenter, float inAmplitude, float in
 	return { x, y };
 }
 
+//generates a circular motion pattern based on center, radius, and angle
 Vector2D Vector2D::CircularMotion(Vector2D inCenter, float inRadius, float inAngle)
 {
 	float cosX = inCenter.x + inRadius * cosf(inAngle);

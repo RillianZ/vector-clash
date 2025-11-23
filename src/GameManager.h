@@ -16,7 +16,7 @@ public:
 	// Draw current game state (call between BeginDrawing/EndDrawing)
 	void Draw();
 
-	private:
+private:
 	int screenWidth_;
 	int screenHeight_;
 	float halfScreenWidth_;
@@ -30,17 +30,17 @@ public:
 	State state_;
 
 	//number of players selected
-	int selectedPlayers_; 
+	int selectedPlayers_;
 
 	//resets players based on player count
-	void ResetPlayers(int playerCount); 
+	void ResetPlayers(int playerCount);
 
 	//sets winner
-	int winner_; 
+	int winner_;
 
 	// number of players at start of current match (used for game-over rules)
-	int initialPlayerCount_; 
-	
+	int initialPlayerCount_;
+
 	// Solo mode tracking
 	float bestSoloTailLength_;
 
