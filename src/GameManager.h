@@ -10,7 +10,8 @@ class GameManager
 {
 public:
 	GameManager(int screenWidth, int screenHeight);
-
+	// Destructor
+	~GameManager();
 	// Update game state (call every frame with dt)
 	void Update(float dt);
 
@@ -52,7 +53,7 @@ private:
 	mPlayer playerFour_;
 	Enemy enemyOne_;
 
-	// Previous frame player position for collision checks
+	// Prediction tracking
 	Vector2 previousPlayerPos_;
 
 	// Respawn logic
@@ -65,4 +66,8 @@ private:
 
 	// internal routines
 	bool CheckHeadAgainstAllTails(ITailOwner* subject);
+
+	Music bgm_;
+	bool hasBgm_ = false;
+	bool audioInitialized_ = false;
 };

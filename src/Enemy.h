@@ -7,12 +7,18 @@
 #include <raylib.h>
 #include <deque>
 
+// Forward declaration to store a pointer
+class mPlayer;
+
 class Enemy : public ITailOwner
 {
 public:
-	Enemy(Vector2 startPos, Vector2 size, float speed, Color color);
+	Enemy(Vector2 startPos, Vector2 size, float speed, float turnSpeed, Color color, int screenW, int screenH);
 
-	// --- ITailOwner Interface Implementation ---
+	// New: Pass the player so the enemy can see the player's tail
+	void SetPlayerReference(mPlayer* playerRef);
+
+	// --- ITailOwner Interface
 	virtual void OwnerUpdate(float dt) override;
 	virtual void OwnerDraw() override;
 	virtual void OwnerKill() override;
@@ -26,22 +32,29 @@ public:
 	// Reset enemy to initial state
 	void Reset(Vector2 startPos);
 
-
 	// --- Enemy Specific Methods ---
 	void SetTarget(Vector2 targetPos);
 
 private:
-	// LOGIC: Use your custom class for position/velocity so we can use your math methods
+	//Helper for "Cone" collision detection ahead of enemy
+	bool CheckCollisionAhead(Vector2D start, Vector2D dir, float distance);
+
+	// LOGIC: Getting position and velocity of enemy
 	Vector2D position_;
+	float currentAngle_; // Degrees
+	float turnSpeed_; // // Degrees per second same as player
+	Vector2D velocity_;
 
 	// DATA: Store tail as Raylib Vector2 because ITailOwner requires it
 	std::deque<Vector2> tailSegments_;
+	// Pointer to player for tail checks
+	mPlayer* playerRef_;
+	int screenWidth_;
+	int screenHeight_;
 
 	Vector2D currentTarget_;
 	float speed_;
 	Color color_;
 	Vector2 size_;
 	bool isAlive_;
-
-	
 };

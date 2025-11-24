@@ -149,7 +149,7 @@ void mPlayer::mPUpdate(float deltaTime)
 //Draws the snake
 void mPlayer::mPDraw()
 {
-	// 1. Draw the trail
+	// Draw the trail
 	if (m_trail.size() > 1)
 	{
 		for (size_t i = 0; i < m_trail.size() - 1; ++i)
@@ -158,7 +158,7 @@ void mPlayer::mPDraw()
 		}
 	}
 
-	// 2. Draw the player's head
+	// Draw the player's head
 	if (!m_isAlive) return;
 	Rectangle rec = { m_position.x, m_position.y, m_size.x, m_size.y };
 	Vector2 origin = { m_size.x / 2.0f, m_size.y / 2.0f };

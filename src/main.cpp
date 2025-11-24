@@ -18,7 +18,7 @@ Enemy, (not started yet)
 Powerups, (not started yet)
 the powerup class will have a base class that changes the players stats on pickup and derived classes for each powerup type
 
-Math/Vector2D, (need to update my classes to use Vector2D for  the exam)
+Math/Vector2D
 A game manager, controls all functions and updates and similar. (Started on this one)
 map editor (NOT IMPLEMENTED YET)
 The Main cpp file to run the game loop (mostly done)
@@ -55,7 +55,6 @@ int main()
 {
 	int screenWidth = 1280;
 	int screenHeight = 1024;
-
 	InitWindow(screenWidth, screenHeight, "Vector Clash");
 	SetTargetFPS(60);
 

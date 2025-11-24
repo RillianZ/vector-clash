@@ -1,83 +1,86 @@
 #include "Vector2D.h"
 
 //This whole class is used for math and calculations
+//I reworked to use return by value instead of reference parameters
 
 //calculates the magnitude of the vector
-float Vector2D::CalculateMagnitude()
+float Vector2D::CalculateMagnitude() const
 {
-	float magnitudeSquared = x * x + y * y;
-	float magnitude = sqrtf(magnitudeSquared);
-	return magnitude;
+	return  sqrtf(x * x + y * y);;
 }
 
 //adds two vectors together and returns the result
-Vector2D Vector2D::SetVectorOffset(Vector2D inVectorToAdd)
+Vector2D Vector2D::SetVectorOffset(Vector2D inVectorToAdd) const
 {
-	float outVectorX = x + inVectorToAdd.x;
-	float outVectorY = y + inVectorToAdd.y;
-	Vector2D outVector{ outVectorX, outVectorY };
-
-	return outVector;
+	return { x + inVectorToAdd.x, y + inVectorToAdd.y };
 }
 
 //scales the vector by a scalar value
-Vector2D Vector2D::ScaleVector(float inScalar)
+Vector2D Vector2D::ScaleVector(float inScalar) const
 {
-	float scaledXVector = x * inScalar;
-	float scaledYVector = y * inScalar;
-	Vector2D scaledVector{ scaledXVector, scaledYVector };
-
-	return scaledVector;
+	return { x * inScalar, y * inScalar };
 }
 
 //calculates the vector pointing towards a target vector
-Vector2D Vector2D::VectorTowardsTarget(Vector2D inTargetVector)
+Vector2D Vector2D::VectorTowardsTarget(Vector2D inTargetVector) const
 {
-	float targetedXVector = inTargetVector.x - x;
-	float targetedYVector = inTargetVector.y - y;
-	Vector2D targetedVector{ targetedXVector , targetedYVector };
-
-	return targetedVector;
+	return { inTargetVector.x - x, inTargetVector.y - y };
 }
 
 //calculates the distance to a target vector
-float Vector2D::DistanceToTarget(Vector2D inTargetedVector)
+float Vector2D::DistanceToTarget(Vector2D inTargetedVector) const
 {
-	Vector2D targetedVector = VectorTowardsTarget(inTargetedVector);
-	float distanceToTargetedVector = targetedVector.CalculateMagnitude();
-
-	return distanceToTargetedVector;
+	return VectorTowardsTarget(inTargetedVector).CalculateMagnitude();
 }
 
-//normalizes the vector aka makes its magnitude 1
-Vector2D Vector2D::NormalizeVector()
+//normalizes the vector to have a magnitude of 1
+// if the magnitude is 0, returns a zero vector to avoid division by zero
+Vector2D Vector2D::NormalizeVector() const
 {
-	if (CalculateMagnitude() == 0)
-	{
-		return { 0, 0 };
-	}
-
-	float normalizedXVector = x / CalculateMagnitude();
-	float normalizedYVector = y / CalculateMagnitude();
-	Vector2D normalizedVector{ normalizedXVector,normalizedYVector };
-
-	return normalizedVector;
+	float mag = CalculateMagnitude();
+	if (mag == 0) return { 0, 0 };
+	return { x / mag, y / mag };
 }
 
-//generates a cosine movement pattern based on center, amplitude, and angle
+// Rotates a vector using the 2D Rotation Matrix
+Vector2D Vector2D::Rotate(float angle) const
+{
+	float cosRes = cosf(angle);
+	float sinRes = sinf(angle);
+
+	// Formula: x' = x cos - y sin, y' = x sin + y cos
+	float newX = x * cosRes - y * sinRes;
+	float newY = x * sinRes + y * cosRes;
+
+	return { newX, newY };
+}
+
+// Returns the angle of the vector in radians (atan2)
+// atan2 returns angle in range -PI to PI
+// angle 0 is along positive x-axis, PI/2 is along positive y-axis
+float Vector2D::GetAngle() const
+{
+	return atan2f(y, x);
+}
+
+// Generates a point moving in a cosine wave pattern
+// along the x-axis around a center point
+// inAmplitude controls the wave height
+// inAngle controls the phase of the wave
+
 Vector2D Vector2D::CosineMovement(Vector2D inCenter, float inAmplitude, float inAngle)
 {
-	float x = inCenter.x + inAmplitude * cosf(inAngle);
-	float y = inCenter.y;
-
-	return { x, y };
+	return { inCenter.x + inAmplitude * cosf(inAngle), inCenter.y };
 }
 
-//generates a circular motion pattern based on center, radius, and angle
 Vector2D Vector2D::CircularMotion(Vector2D inCenter, float inRadius, float inAngle)
 {
-	float cosX = inCenter.x + inRadius * cosf(inAngle);
-	float sinY = inCenter.y + inRadius * sinf(inAngle);
+	return { inCenter.x + inRadius * cosf(inAngle), inCenter.y + inRadius * sinf(inAngle) };
+}
 
-	return { cosX, sinY };
+float Vector2D::NormalizeAngleDiff(float diff)
+{
+	while (diff > 180.0f) diff -= 360.0f;
+	while (diff < -180.0f) diff += 360.0f;
+	return diff;
 }

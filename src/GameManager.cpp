@@ -4,7 +4,6 @@
 #include <string>
 #include "Vector2D.h"
 
-
 GameManager::GameManager(int screenWidth, int screenHeight)
 	: screenWidth_(screenWidth)
 	, screenHeight_(screenHeight)
@@ -21,10 +20,25 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, ORANGE, KEY_A, KEY_D)
 	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, GREEN, KEY_J, KEY_L)
 	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, YELLOW, KEY_F, KEY_H)
-	, enemyOne_({ 0, 0 }, { 10.0f, 10.0f }, 285.0f, BLUE)
-{
+	, enemyOne_({ 0, 0 }, { 16.0f, 16.0f }, 255.0f, 200.0f, BLUE, screenWidth, screenHeight)
+	, hasBgm_(false)
+	, audioInitialized_(false)
+
 	// initialize players and owners according to selectedPlayers_
+{
 	ResetPlayers(selectedPlayers_);
+	// Initialize audio device and load background music
+	InitAudioDevice();
+	audioInitialized_ = IsAudioDeviceReady();
+
+	if (audioInitialized_)
+	{
+		//bgm loads and plays at half volume, sets bool to true to avoid reloading
+		bgm_ = LoadMusicStream("resources/background.mp3");
+		SetMusicVolume(bgm_, 0.5f);
+		PlayMusicStream(bgm_);
+		hasBgm_ = true;
+	}
 }
 
 void GameManager::ResetPlayers(int playerCount)
@@ -57,6 +71,8 @@ void GameManager::ResetPlayers(int playerCount)
 	{
 		// Spawn enemy on the opposite side of the screen from Player 1
 		enemyOne_.Reset({ halfScreenWidth_ + sep, halfScreenHeight_ });
+		//Set player reference for enemy AI
+		enemyOne_.SetPlayerReference(&playerOne_);
 		owners_.push_back(&enemyOne_);
 	}
 	// IF MULTIPLAYER: Add other human players
@@ -171,11 +187,19 @@ void GameManager::Update(float dt)
 			spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
 			state_ = State::Running;
 		}
+		// Update audio stream while in menu too
+		if (audioInitialized_ && hasBgm_)
+		{
+			UpdateMusicStream(bgm_);
+			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+		}
 
 		return;
 	}
+	//Main running state game logic!
 	if (state_ == State::Running)
 	{
+		//Solo mode enemy logic
 		if (selectedPlayers_ == 1)
 		{
 			// 1. RESPAWN LOGIC
@@ -195,7 +219,7 @@ void GameManager::Update(float dt)
 					enemyRespawnTimer_ = enemyRespawnDelay_;
 				}
 			}
-			// 2. MOVEMENT PREDICTION LOGIC
+			//  MOVEMENT PREDICTION LOGIC
 			else if (playerOne_.IsAlive())
 			{
 				// Convert positions to Vector2D for math
@@ -204,15 +228,15 @@ void GameManager::Update(float dt)
 
 				Vector2D velocity = prevPosVec.VectorTowardsTarget(currPosVec);
 
-				// Adjust this to aim further ahead or closer
+				// Adjust this to aim further ahead or closer for enemy
 				// We use ScaleVector to multiply the movement vector
-				Vector2D aimOffset = velocity.ScaleVector(45.0f);
+				// basically knowing the players direction and speed and multiplying it and aiming that direction
+				Vector2D aimOffset = velocity.ScaleVector(35.0f);
 
 				// Calculate the predicted point
 				Vector2D predictedPoint = currPosVec.SetVectorOffset(aimOffset);
 
 				// Apply target
-				// We convert back to Raylib Vector2 just to pass it to SetTarget
 				enemyOne_.SetTarget({ predictedPoint.x, predictedPoint.y });
 			}
 			else
@@ -223,7 +247,6 @@ void GameManager::Update(float dt)
 
 			// Update previous position for the next frame's calculation
 			previousPlayerPos_ = playerOne_.GetPosition();
-
 		}
 		// update only active owners
 		for (ITailOwner* o : owners_) o->OwnerUpdate(dt);
@@ -246,8 +269,6 @@ void GameManager::Update(float dt)
 			}
 		}
 
-		
-
 		// determine game over by counting alive owners
 		{
 			int aliveCount = 0;
@@ -261,17 +282,18 @@ void GameManager::Update(float dt)
 				}
 			}
 
-			// For multiplayer matches (initialPlayerCount_ > 1) game-over when <= 1 remains.
-			// For solo mode (initialPlayerCount_ == 1) treat game-over only when player is dead (aliveCount == 0).
+			// For multiplayer matches  game-over when one left
+			// For solo mode treat game-over only when player is dead
 			bool matchOver = false;
 			if (initialPlayerCount_ > 1)
 			{
 				if (aliveCount <= 1) matchOver = true;
 			}
-			else // solo
-			{
-				if (aliveCount == 0) matchOver = true;
-			}
+			else // solo game
+				if (!playerOne_.IsAlive())
+				{
+					matchOver = true;
+				}
 
 			if (matchOver)
 			{
@@ -293,6 +315,14 @@ void GameManager::Update(float dt)
 				}
 			}
 		}
+
+		// Update music stream each frame while running
+		if (audioInitialized_ && hasBgm_)
+		{
+			UpdateMusicStream(bgm_);
+			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+			SetMusicVolume(bgm_, 1.0f); // Set volume to 50%
+		}
 	}
 	else // GameOver: Space = restart, Enter = back to menu
 	{
@@ -306,6 +336,13 @@ void GameManager::Update(float dt)
 		{
 			// return to menu so user can change selectedPlayers_
 			state_ = State::Menu;
+		}
+		// Keep updating music while on GameOver screen
+		if (audioInitialized_ && hasBgm_)
+		{
+			UpdateMusicStream(bgm_);
+			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+			SetMusicVolume(bgm_, 0.5f); // Set volume to 50%
 		}
 	}
 }
@@ -358,6 +395,10 @@ void GameManager::Draw()
 	// GameOver overlay winner/looser message
 	if (state_ == State::GameOver)
 	{
+		// draw different messages for solo vs multiplayer
+		//uses measuretext to center the text on screen
+		//usess snprintf to format the tail length values into strings for display
+		//Might clean this up later
 		if (selectedPlayers_ == 1)
 		{
 			float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
@@ -396,5 +437,22 @@ void GameManager::Draw()
 			int hintW = MeasureText(hint.c_str(), hintSize);
 			DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 30, hintSize, LIGHTGRAY);
 		}
+	}
+}
+// Destructor
+GameManager::~GameManager()
+{
+	// Stop/unload music and close audio device if initialized
+	if (hasBgm_)
+	{
+		StopMusicStream(bgm_);
+		UnloadMusicStream(bgm_);
+		hasBgm_ = false;
+	}
+
+	if (audioInitialized_)
+	{
+		CloseAudioDevice();
+		audioInitialized_ = false;
 	}
 }
