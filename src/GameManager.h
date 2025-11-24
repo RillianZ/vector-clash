@@ -5,6 +5,8 @@
 #include "ITailOwner.h"
 #include <raylib.h>
 #include "Enemy.h"
+#include "MapGenerator.h"
+#include "PowerUp.h"
 
 class GameManager
 {
@@ -43,14 +45,34 @@ private:
 	// number of players at start of current match (used for game-over rules)
 	int initialPlayerCount_;
 
+	// Track player wins across matches
+	std::vector<int> playerWins_;
+
 	// Solo mode tracking
 	float bestSoloTailLength_;
+
+
+	//  Solo Mode Stats
+	int enemiesDupedCurrent_;
+	int enemiesDupedBest_;
+
+	// Hard Mode
+	bool hardMode_;
+	float hardModeTimer_;
+	const float hardModeInterval_ = 5.0f; // Spawn timer in seconds
+	std::vector<Enemy*> extraEnemies_; // Dynamic enemies container (used to avoid memory leaks)
+
+	// PowerUps
+	std::vector<PowerUp> powerups_;
+	float powerupSpawnTimer_;
+	void SpawnPowerUp();
 
 	// Players constructed here
 	mPlayer playerOne_;
 	mPlayer playerTwo_;
 	mPlayer playerThree_;
 	mPlayer playerFour_;
+	// Enemy for solo mode
 	Enemy enemyOne_;
 
 	// Prediction tracking
@@ -64,10 +86,26 @@ private:
 	// Tail owners list for generic collision checks
 	std::vector<ITailOwner*> owners_;
 
-	// internal routines
-	bool CheckHeadAgainstAllTails(ITailOwner* subject);
+	// Map generator instance
+	MapGenerator mapGen_;
 
+	// Map selection
+	MapType selectedMapType_;
+
+	
+	// Check head against map obstacles
+	ITailOwner* GetTailCollisionVictim(ITailOwner* subject);
+
+	bool CheckHeadAgainstMap(ITailOwner* subject);
+
+	// Background music
 	Music bgm_;
 	bool hasBgm_ = false;
+	// Sound effects
+	Sound fxMenuDing_;
+	Sound fxMenuSelect_;
+	Sound fxCrash_;
+	Sound fxPowerup_;
+
 	bool audioInitialized_ = false;
 };

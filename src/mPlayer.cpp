@@ -7,6 +7,7 @@ mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotation
 	m_position(pStartPos), // starting position
 	m_size(pSize), // size of head
 	m_speed(pSpeed), // pixels per second
+	m_baseSpeed(pSpeed), // store base speed
 	m_rotationSpeed(pRotationSpeed), // degrees per second rotate
 	m_directionAngle(90.0f), // facing down initially
 	m_color(pColor), // default color
@@ -17,7 +18,10 @@ mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotation
 	m_tailGrowthEnabled(true),   // tail grows continuously by default
 	m_growthRatePixelsPerSecond(40.0f),      // pixels per second when continuous
 	m_keyLeft(pKeyLeft), //Standard key for left movement
-	m_keyRight(pKeyRight) //Standard key for right movement
+	m_keyRight(pKeyRight), //Standard key for right movement
+	m_speedTimer(0.0f),       //timers for power-ups
+	m_ghostTimer(0.0f),       
+	m_hasTailCutter(false)  
 {
 	m_maxTrailPoints = static_cast<size_t>(m_tailLengthPixels / m_trailSampleDistance);
 	if (m_maxTrailPoints < 2) m_maxTrailPoints = 2; // Ensure at least 2 points
@@ -46,6 +50,12 @@ void mPlayer::Reset(Vector2 pStartPos, int pKeyLeft, int pKeyRight, float pStart
 	// clear and seed trail
 	m_trail.clear();
 	m_trail.push_back(m_position);
+
+	// reset powerups and base speed
+	m_speed = m_baseSpeed;
+	m_speedTimer = 0.0f;
+	m_ghostTimer = 0.0f;
+	m_hasTailCutter = false;
 }
 
 //sets the control keys for the player
@@ -81,6 +91,44 @@ void mPlayer::SetTailGrowthRate(float pixelsPerSecond)
 		m_growthRatePixelsPerSecond = pixelsPerSecond;
 }
 
+// Apply PowerUp Effects
+void mPlayer::ApplyPowerUp(PowerUpType type)
+{
+	m_trail.push_back(m_position);
+
+	switch (type)
+	{
+	case PowerUpType::SpeedBoost:
+		m_speed = m_baseSpeed * 1.5f; // 50% faster
+		m_speedTimer = 3.0f;          // Lasts 3 seconds
+		break;
+
+	case PowerUpType::SlowDown:
+		m_speed = m_baseSpeed * 0.5f; // 50% slower
+		m_speedTimer = 3.0f;
+		break;
+
+	case PowerUpType::PhaseShift:
+		m_ghostTimer = 5.0f;          // 5 seconds of invulnerability
+		break;
+
+	case PowerUpType::TailCutter:
+		m_hasTailCutter = true;       // Lasts until used
+		break;
+	}
+}
+
+// Status Getters
+bool mPlayer::IsPhasing() const { return m_ghostTimer > 0.0f; }
+bool mPlayer::HasTailCutter() const { return m_hasTailCutter; }
+void mPlayer::ConsumeTailCutter() { m_hasTailCutter = false; }
+
+void mPlayer::ClearTail()
+{
+	m_trail.clear();
+	m_trail.push_back(m_position);
+}
+
 //Handles player input for rotation
 void mPlayer::mPHandleInput(float deltaTime)
 {
@@ -97,40 +145,48 @@ void mPlayer::mPHandleInput(float deltaTime)
 }
 
 //Updates the player position and trail
-// look into this since it now uses dequeue which i am not familar with
 void mPlayer::mPUpdate(float deltaTime)
 {
 	if (!m_isAlive) return;
 
-	// 1. Calculate the normalized direction vector from the angle
-	//Update this to use Vector2D
-	float angleRad = m_directionAngle * DEG2RAD;
-	Vector2 direction = { cosf(angleRad), sinf(angleRad) };
+	// speed timer countdown
+	if (m_speedTimer > 0.0f)
+	{
+		m_speedTimer -= deltaTime;
+		if (m_speedTimer <= 0.0f) m_speed = m_baseSpeed; 
+	}
+	// ghost timer countdown
+	if (m_ghostTimer > 0.0f)
+	{
+		m_ghostTimer -= deltaTime;
+	}
 
-	// 2. Calculate velocity (direction * speed)
-	Vector2 velocity = Vector2Scale(direction, m_speed);
+	float currentSampleDist = (m_speed < m_baseSpeed) ? 1.5f : m_trailSampleDistance;
 
-	// 3. Update position (position + velocity * deltaTime)
-	m_position = Vector2Add(m_position, Vector2Scale(velocity, deltaTime));
+	//Calculate the normalized direction vector from the angle
+	Vector2D direction = Vector2D::CircularMotion({ 0,0 }, 1.0f, m_directionAngle * DEG2RAD);
 
-	// 4. SAMPLE the new position into the trail only when the player moved enough
+	// Calculate velocity (direction * speed)
+	Vector2D velocity = direction.ScaleVector(m_speed * deltaTime);
+
+	Vector2D currentPos = { m_position.x, m_position.y };
+	Vector2D newPos = currentPos.SetVectorOffset(velocity);
+
+	// Update position (position + velocity * deltaTime)
+	m_position = { newPos.x, newPos.y };
+
+	//sample the new position into the trail only when the player moved enough
 	Vector2 last = m_trail.empty() ? m_position : m_trail.back();
-	float dist = Vector2Distance(last, m_position);
+	Vector2D lastVec = { last.x, last.y };
+	Vector2D currVec = { m_position.x, m_position.y };
 
-	if (dist >= m_trailSampleDistance)
+	if (lastVec.DistanceToTarget(currVec) >= currentSampleDist)
 	{
 		m_trail.push_back(m_position);
 	}
-	else
-	{
-		// keep last point updated so head doesn't lag visually
-		if (!m_trail.empty())
-			m_trail.back() = m_position;
-		else
-			m_trail.push_back(m_position);
-	}
+	else if  (!m_trail.empty()) m_trail.back() = m_position;
 
-	// 5. Continuous growth: add pixels to allowed tail length each frame (smooth)
+	// Continuous growth: add pixels to allowed tail length each frame (smooth)
 	if (m_tailGrowthEnabled)
 	{
 		m_tailLengthPixels += m_growthRatePixelsPerSecond * deltaTime;
@@ -146,23 +202,89 @@ void mPlayer::mPUpdate(float deltaTime)
 	}
 }
 
+// Simple rectangle of the player's head (for collision checks)
+Rectangle mPlayer::GetRect() const
+{
+	// Convert center position to top-left for collision logic
+	return {
+		m_position.x - m_size.x / 2.0f,
+		m_position.y - m_size.y / 2.0f,
+		m_size.x,
+		m_size.y
+	};
+}
+
 //Draws the snake
 void mPlayer::mPDraw()
 {
 	// Draw the trail
 	if (m_trail.size() > 1)
 	{
+		Color trailColor = m_color;
+		if (m_ghostTimer > 0.0f) trailColor = Fade(m_color, 0.2f);
 		for (size_t i = 0; i < m_trail.size() - 1; ++i)
 		{
-			DrawLineV(m_trail[i], m_trail[i + 1], m_color);
+			DrawLineV(m_trail[i], m_trail[i + 1], trailColor);
+		}		
+	}
+
+	// checks if alive before drawing head
+	if (!m_isAlive) return;
+
+	// initialize head color
+	Color headColor = m_color;
+
+	// Speed Status Logic
+	if (m_speedTimer > 0.0f)
+	{
+		// Create a "strobe" effect by checking time
+		// Flashes every few frames
+		bool flash = (int)(GetTime() * 15.0f) % 2 == 0;
+
+		if (m_speed > m_baseSpeed)
+		{
+			// SPEED BOOST: Flash Green
+			if (flash) headColor = RAYWHITE;
+		}
+		else if (m_speed < m_baseSpeed)
+		{
+			// SLOW DOWN: Flash Red
+			if (flash) headColor = DARKGRAY;
 		}
 	}
 
-	// Draw the player's head
-	if (!m_isAlive) return;
+	// Fade to sky blue when ghosting
+	if (m_ghostTimer > 0.0f)
+	{
+		headColor = Fade(SKYBLUE, 0.3f);
+	}
+
+	// Define rectangle for head
 	Rectangle rec = { m_position.x, m_position.y, m_size.x, m_size.y };
 	Vector2 origin = { m_size.x / 2.0f, m_size.y / 2.0f };
-	DrawRectanglePro(rec, origin, m_directionAngle, m_color);
+	// Draw head rectangle with rotation
+	DrawRectanglePro(rec, origin, m_directionAngle, headColor);
+
+	// Draw tail cutter indicator if active
+	if (m_hasTailCutter)
+	{
+		DrawRectanglePro(rec, origin, m_directionAngle, Fade(GOLD, 0.5f));
+	}
+
+	float activeTimer = 0.0f;
+	Color textColor = WHITE;
+
+	if (m_speedTimer > 0.0f) { activeTimer = m_speedTimer; textColor = YELLOW; }
+	if (m_ghostTimer > 0.0f) { activeTimer = m_ghostTimer; textColor = SKYBLUE; }
+
+	if (activeTimer > 0.0f)
+	{
+		// Convert to string with 1 decimal place
+		std::string timeText = std::to_string(activeTimer).substr(0, 3);
+
+		// Position text slightly above the player
+		DrawText(timeText.c_str(), (int)m_position.x - 10, (int)m_position.y - 25, 10, textColor);
+	}
 }
 
 // Lifecycle hooks (ITailOwner)
@@ -212,6 +334,7 @@ bool mPlayer::IsAlive() const
 void mPlayer::mPKill()
 {
 	m_isAlive = false;
+	ClearTail();
 }
 
 void mPlayer::CutTrail(size_t cutIndex)

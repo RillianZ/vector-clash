@@ -5,6 +5,7 @@
 #include "Vector2D.h"
 #include <raylib.h>
 #include "ITailOwner.h"
+#include "PowerUp.h"
 
 class mPlayer : public ITailOwner
 {
@@ -45,11 +46,24 @@ public:
 
 	void SetControlKeys(int leftKey, int rightKey);
 
+	// Power-up application
+	void ApplyPowerUp(PowerUpType type);
+
+	// Power-up status checks
+	bool IsPhasing() const;     // For Ghost Mode (ignores collisions)
+	bool HasTailCutter() const; // For Cutter Mode
+	void ConsumeTailCutter();   // Uses up the cutter charge
+	void ClearTail();
+
+	// Simple rectangle of the player's head (for collision checks)
+	Rectangle GetRect() const;
+
 private:
 
 	Vector2 m_position;
 	Vector2 m_size;
 	float m_speed;
+	float m_baseSpeed;
 	float m_rotationSpeed;
 	float m_directionAngle; // In degrees (0 deg is right)
 	Color m_color;
@@ -70,4 +84,10 @@ private:
 	// Per-instance control keys
 	int m_keyLeft;
 	int m_keyRight;
+
+	// Power-up states
+	float m_speedTimer;      
+	float m_ghostTimer;      
+	bool m_hasTailCutter; 
+
 };
