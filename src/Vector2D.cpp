@@ -67,17 +67,18 @@ float Vector2D::GetAngle() const
 // along the x-axis around a center point
 // inAmplitude controls the wave height
 // inAngle controls the phase of the wave
-
 Vector2D Vector2D::CosineMovement(Vector2D inCenter, float inAmplitude, float inAngle)
 {
 	return { inCenter.x + inAmplitude * cosf(inAngle), inCenter.y };
 }
 
+// Generates a point moving in a circular motion
 Vector2D Vector2D::CircularMotion(Vector2D inCenter, float inRadius, float inAngle)
 {
 	return { inCenter.x + inRadius * cosf(inAngle), inCenter.y + inRadius * sinf(inAngle) };
 }
 
+// Normalizes an angle difference to the range -180 to 180 degrees
 float Vector2D::NormalizeAngleDiff(float diff)
 {
 	while (diff > 180.0f) diff -= 360.0f;

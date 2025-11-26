@@ -65,7 +65,8 @@ private:
 	float m_speed;
 	float m_baseSpeed;
 	float m_rotationSpeed;
-	float m_directionAngle; // In degrees (0 deg is right)
+	// Direction angle in degrees (0 = right, 90 = down, etc.)
+	float m_directionAngle;
 	Color m_color;
 	bool m_isAlive;
 
@@ -79,15 +80,14 @@ private:
 
 	// Continuous growth
 	bool m_tailGrowthEnabled;
-	float m_growthRatePixelsPerSecond; // pixels added to tail length per second
+	float m_growthRatePixelsPerSecond;
 
 	// Per-instance control keys
 	int m_keyLeft;
 	int m_keyRight;
 
 	// Power-up states
-	float m_speedTimer;      
-	float m_ghostTimer;      
-	bool m_hasTailCutter; 
-
+	float m_speedTimer;
+	float m_ghostTimer;
+	bool m_hasTailCutter;
 };

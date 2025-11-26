@@ -1,7 +1,7 @@
 #include "mPlayer.h"
 #include "raymath.h"
 
-//Constructor implement
+//Constructor implement : can accept custom control
 mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotationSpeed, Color pColor, int pKeyLeft, int pKeyRight)
 	:
 	m_position(pStartPos), // starting position
@@ -19,9 +19,9 @@ mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotation
 	m_growthRatePixelsPerSecond(40.0f),      // pixels per second when continuous
 	m_keyLeft(pKeyLeft), //Standard key for left movement
 	m_keyRight(pKeyRight), //Standard key for right movement
-	m_speedTimer(0.0f),       //timers for power-ups
-	m_ghostTimer(0.0f),       
-	m_hasTailCutter(false)  
+	m_speedTimer(0.0f),       //timers for power-ups (speed)
+	m_ghostTimer(0.0f),       //timers for power-ups (ghost)
+	m_hasTailCutter(false)  // starts without cutter
 {
 	m_maxTrailPoints = static_cast<size_t>(m_tailLengthPixels / m_trailSampleDistance);
 	if (m_maxTrailPoints < 2) m_maxTrailPoints = 2; // Ensure at least 2 points
@@ -41,7 +41,7 @@ void mPlayer::Reset(Vector2 pStartPos, int pKeyLeft, int pKeyRight, float pStart
 	m_keyLeft = pKeyLeft;
 	m_keyRight = pKeyRight;
 
-	// reset tail params to defaults (keep same defaults as ctor)
+	// reset tail params to defaults
 	m_tailLengthPixels = 200.0f;
 	m_trailSampleDistance = 3.0f;
 	m_maxTrailPoints = static_cast<size_t>(m_tailLengthPixels / m_trailSampleDistance);
@@ -118,21 +118,24 @@ void mPlayer::ApplyPowerUp(PowerUpType type)
 	}
 }
 
-// Status Getters
+// Status Getters for phasing
 bool mPlayer::IsPhasing() const { return m_ghostTimer > 0.0f; }
+// Status Getters for cutter availability
 bool mPlayer::HasTailCutter() const { return m_hasTailCutter; }
+// Status Getters for cutter consumption
 void mPlayer::ConsumeTailCutter() { m_hasTailCutter = false; }
 
+// Clears the tail segments from player
 void mPlayer::ClearTail()
 {
 	m_trail.clear();
 	m_trail.push_back(m_position);
 }
 
+// Use per-instance keys if set by constructor, otherwise defaults KEY_LEFT/KEY_RIGHT
 //Handles player input for rotation
 void mPlayer::mPHandleInput(float deltaTime)
 {
-	// Use per-instance keys if set; otherwise defaults KEY_LEFT/KEY_RIGHT
 	if (IsKeyDown(m_keyLeft))
 	{
 		m_directionAngle -= m_rotationSpeed * deltaTime;
@@ -149,18 +152,17 @@ void mPlayer::mPUpdate(float deltaTime)
 {
 	if (!m_isAlive) return;
 
-	// speed timer countdown
 	if (m_speedTimer > 0.0f)
 	{
 		m_speedTimer -= deltaTime;
-		if (m_speedTimer <= 0.0f) m_speed = m_baseSpeed; 
+		if (m_speedTimer <= 0.0f) m_speed = m_baseSpeed;
 	}
-	// ghost timer countdown
 	if (m_ghostTimer > 0.0f)
 	{
 		m_ghostTimer -= deltaTime;
 	}
 
+	// Determine current sample distance (larger when slowed)
 	float currentSampleDist = (m_speed < m_baseSpeed) ? 1.5f : m_trailSampleDistance;
 
 	//Calculate the normalized direction vector from the angle
@@ -180,22 +182,22 @@ void mPlayer::mPUpdate(float deltaTime)
 	Vector2D lastVec = { last.x, last.y };
 	Vector2D currVec = { m_position.x, m_position.y };
 
+	// Sample new position into trail if moved enough
 	if (lastVec.DistanceToTarget(currVec) >= currentSampleDist)
 	{
 		m_trail.push_back(m_position);
 	}
-	else if  (!m_trail.empty()) m_trail.back() = m_position;
+	else if (!m_trail.empty()) m_trail.back() = m_position;
 
 	// Continuous growth: add pixels to allowed tail length each frame (smooth)
 	if (m_tailGrowthEnabled)
 	{
 		m_tailLengthPixels += m_growthRatePixelsPerSecond * deltaTime;
-		// recompute max points from pixel length and sample distance
 		m_maxTrailPoints = static_cast<size_t>(m_tailLengthPixels / m_trailSampleDistance);
 		if (m_maxTrailPoints < 2) m_maxTrailPoints = 2;
 	}
 
-	// 6. Trim oldest parts of the trail so the tail "follows"
+	// Trim oldest parts of the trail so the tail "follows"
 	while (m_trail.size() > m_maxTrailPoints)
 	{
 		m_trail.pop_front();
@@ -225,7 +227,7 @@ void mPlayer::mPDraw()
 		for (size_t i = 0; i < m_trail.size() - 1; ++i)
 		{
 			DrawLineV(m_trail[i], m_trail[i + 1], trailColor);
-		}		
+		}
 	}
 
 	// checks if alive before drawing head
@@ -238,7 +240,6 @@ void mPlayer::mPDraw()
 	if (m_speedTimer > 0.0f)
 	{
 		// Create a "strobe" effect by checking time
-		// Flashes every few frames
 		bool flash = (int)(GetTime() * 15.0f) % 2 == 0;
 
 		if (m_speed > m_baseSpeed)
@@ -287,24 +288,26 @@ void mPlayer::mPDraw()
 	}
 }
 
-// Lifecycle hooks (ITailOwner)
+// Lifecycle hooks for game manager
 void mPlayer::OwnerUpdate(float deltaTime)
 {
-	// combine input + update so managers can call one method
 	mPHandleInput(deltaTime);
 	mPUpdate(deltaTime);
 }
 
+// Draws the player and its trail
 void mPlayer::OwnerDraw()
 {
 	mPDraw();
 }
 
+// Calls mPKill to kill the player
 void mPlayer::OwnerKill()
 {
 	mPKill();
 }
 
+// Expose tail "pixel length" so managers can measure/score players
 float mPlayer::GetTailPixelLength() const
 {
 	return m_tailLengthPixels;
@@ -316,31 +319,35 @@ Vector2 mPlayer::GetPosition() const
 	return m_position;
 }
 
+// Returns the size of the player's head
 Vector2 mPlayer::GetSize() const
 {
 	return m_size;
 }
 
+// Returns the deque of tail segments
 const std::deque<Vector2>& mPlayer::GetTailSegments() const
 {
 	return m_trail;
 }
 
+// Returns whether the player is alive
 bool mPlayer::IsAlive() const
 {
 	return m_isAlive;
 }
 
+// Kills the player
 void mPlayer::mPKill()
 {
 	m_isAlive = false;
 	ClearTail();
 }
 
+// Cuts the trail by removing the specified number of oldest segments
 void mPlayer::CutTrail(size_t cutIndex)
 {
 	if (cutIndex >= m_trail.size()) return;
-	// remove front segments up to cutIndex (keeps head)
 	for (size_t i = 0; i < cutIndex && !m_trail.empty(); ++i)
 		m_trail.pop_front();
 }

@@ -12,8 +12,8 @@ class mPlayer;
 // Enemy class derived from ITailOwner
 class Enemy : public ITailOwner
 {
-	// Constructor
 public:
+	// Constructor
 	Enemy(Vector2 startPos, Vector2 size, float speed, float turnSpeed, Color color, int screenW, int screenH);
 
 	// New: Pass the player so the enemy can see the player's tail
@@ -21,7 +21,6 @@ public:
 
 	// Set reference to obstacles for collision detection
 	void SetObstaclesReference(const std::vector<Rectangle>* obstaclesRef);
-	
 
 	//  ITailOwner Interface
 	virtual void OwnerUpdate(float dt) override;
@@ -37,7 +36,7 @@ public:
 	// Reset enemy to initial state
 	void Reset(Vector2 startPos);
 
-	//  Enemy Specific Methods 
+	//  Enemy Specific Methods
 	void SetTarget(Vector2 targetPos);
 
 	// Tail length control (pixels)
@@ -45,7 +44,6 @@ public:
 
 	//  Clear tail segments
 	void ClearTail();
-	
 
 private:
 	//Helper for "Cone" collision detection ahead of enemy
@@ -54,12 +52,12 @@ private:
 	//pointer to obstacles for collision detection
 	const std::vector<Rectangle>* obstaclesRef_;
 
-	// LOGIC: Getting position and velocity of enemy
+	//Getting position and velocity of enemy
 	Vector2D position_;
 	float currentAngle_; // Degrees
 	float turnSpeed_; // // Degrees per second same as player
 
-	// DATA: Store tail as Raylib Vector2 because ITailOwner requires it
+	// Store tail as Raylib Vector2 because ITailOwner requires it
 	std::deque<Vector2> tailSegments_;
 	// Pointer to player for tail checks
 	mPlayer* playerRef_;

@@ -7,15 +7,18 @@
 enum class MapType
 {
 	Clean,      // No obstacles (Stage 1)
-	Fixed,      // Static, hardcoded obstacles (Stage 2)
-	Wave        // Math-generated procedural obstacles (Stage 3)
+	Fixed,      // 4 static cubes in the middle (Stage 2)
+	Wave        // Math-generated  Sin waves (Stage 3)
 };
 
+// MapGenerator class handles map creation and obstacle management
 class MapGenerator
 {
 public:
-	// Constructor and Destructor
+	// Constructor
 	MapGenerator();
+
+	// Destructor
 	~MapGenerator();
 
 	// Main function to build the map based on the selected type
@@ -24,8 +27,7 @@ public:
 	// Draws all active obstacles
 	void Draw();
 
-	// Returns the list of obstacles for collision detection
-	//uses a const reference to avoid copying the vector
+	// Returns the list of obstacles for collision detection, const to avoid bugs
 	const std::vector<Rectangle>& GetObstacles() const;
 
 private:

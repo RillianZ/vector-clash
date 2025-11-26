@@ -7,14 +7,14 @@ enum class PowerUpType
 	SpeedBoost, // Green
 	SlowDown,   // "Fake" Green (looks similar, behaves opposite)
 	PhaseShift, // Blue (Ghost mode)
-	TailCutter  // Gold (Cut tail on impact)
+	TailCutter  // Gold (Cut tail on impact (currently just destroys)
 };
 
 class PowerUp
 {
 public:
 	PowerUp(Vector2D startPos, PowerUpType type);
- 
+
 	//  Keeping track of active state
 	void Update(float dt);
 	void Draw();
@@ -34,5 +34,5 @@ private:
 	bool active_;
 
 	Color color_;
-	float size_; 
+	float size_;
 };

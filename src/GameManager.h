@@ -11,6 +11,7 @@
 class GameManager
 {
 public:
+	// Constructor
 	GameManager(int screenWidth, int screenHeight);
 	// Destructor
 	~GameManager();
@@ -30,6 +31,7 @@ private:
 	float spawnInvulnerableSeconds_;
 	float spawnInvulnerableTimer_;
 
+	// Current game state
 	enum class State { Menu, Running, GameOver };
 	State state_;
 
@@ -50,7 +52,6 @@ private:
 
 	// Solo mode tracking
 	float bestSoloTailLength_;
-
 
 	//  Solo Mode Stats
 	int enemiesDupedCurrent_;
@@ -92,10 +93,10 @@ private:
 	// Map selection
 	MapType selectedMapType_;
 
-	
-	// Check head against map obstacles
+	// Returns pointer to collided tail owner, or nullptr if none
 	ITailOwner* GetTailCollisionVictim(ITailOwner* subject);
 
+	// Check head against map obstacles
 	bool CheckHeadAgainstMap(ITailOwner* subject);
 
 	// Background music

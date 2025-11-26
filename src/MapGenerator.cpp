@@ -1,5 +1,5 @@
 #include "MapGenerator.h"
-#include <iostream> 
+#include <iostream>
 
 // Constructor
 MapGenerator::MapGenerator()
@@ -10,21 +10,26 @@ MapGenerator::~MapGenerator()
 {
 	obstacles_.clear();
 }
-
+// Draws all obstacles
 void MapGenerator::Draw()
 {
 	for (const auto& wall : obstacles_)
 	{
+		// Draw filled wall
 		DrawRectangleRec(wall, GRAY);
-		DrawRectangleLinesEx(wall, 1.0f, DARKGRAY); // Adds a border for visibility
+
+		// Adds a border for visibility
+		DrawRectangleLinesEx(wall, 1.0f, DARKGRAY);
 	}
 }
 
+// Returns the list of obstacles
 const std::vector<Rectangle>& MapGenerator::GetObstacles() const
 {
 	return obstacles_;
 }
 
+// Main map generation function
 void MapGenerator::GenerateMap(MapType type, int screenWidth, int screenHeight)
 {
 	obstacles_.clear();
@@ -40,7 +45,6 @@ void MapGenerator::GenerateMap(MapType type, int screenWidth, int screenHeight)
 	switch (type)
 	{
 	case MapType::Clean:
-		// Just boundaries
 		break;
 
 	case MapType::Fixed:
@@ -62,6 +66,7 @@ void MapGenerator::GenerateFixedMap(int screenW, int screenH)
 	float wallSize = 100.0f;
 	float offset = 250.0f;
 
+	//considering adding more  blocks spawning on hard mode
 	// Add 4 static blocks in a square from center
 	// Top Left
 	obstacles_.push_back({ midX - offset, midY - offset, wallSize, wallSize });
@@ -72,7 +77,8 @@ void MapGenerator::GenerateFixedMap(int screenW, int screenH)
 	// Bottom Right
 	obstacles_.push_back({ midX + offset - wallSize, midY + offset - wallSize, wallSize, wallSize });
 }
-	
+
+//considering adding more waves on hard mode
 // Wave map with procedurally generated wavy walls using teacher taught Vector2D class
 // Since CosineMovement modifies X based on an angle, we step down Y and calculate X using the class.
 void MapGenerator::GenerateWaveMap(int screenW, int screenH)
@@ -90,10 +96,10 @@ void MapGenerator::GenerateWaveMap(int screenW, int screenH)
 
 	//tweak these settings to tweak the wave positioning along the sides (percentage)
 	// Left Side Wave
-	Vector2D leftBase = { (float)screenW * 0.15f, 0.0f }; 
+	Vector2D leftBase = { (float)screenW * 0.15f, 0.0f };
 
 	// Right Side Wave
-	Vector2D rightBase = { (float)screenW * 0.85f, 0.0f }; 
+	Vector2D rightBase = { (float)screenW * 0.85f, 0.0f };
 
 	// Loop to create blocks down the screen
 	for (int i = 0; i < numBlocks; i++)

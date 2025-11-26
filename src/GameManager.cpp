@@ -6,53 +6,55 @@
 
 // Main Constructor
 GameManager::GameManager(int screenWidth, int screenHeight)
-	: screenWidth_(screenWidth)
-	, screenHeight_(screenHeight)
-	, halfScreenWidth_((float)screenWidth / 2.0f)
-	, halfScreenHeight_((float)screenHeight / 2.0f)
+	: screenWidth_(screenWidth) // Store screen dimensions
+	, screenHeight_(screenHeight) // for use in various calculations
+	, halfScreenWidth_((float)screenWidth / 2.0f) // such as centering players
+	, halfScreenHeight_((float)screenHeight / 2.0f) // and enemy spawn positions
 	, spawnInvulnerableSeconds_(1.f) // increase this to avoid instant self-hits at spawn
-	, spawnInvulnerableTimer_(0.0f) 
-	, state_(State::Menu)
+	, spawnInvulnerableTimer_(0.0f) // initialized to 0
+	, state_(State::Menu) // start in Menu state
 	, selectedPlayers_(1) //default to 1 for quicker testing
-	, winner_(0)
-	, bestSoloTailLength_(0.0f)
-	, enemiesDupedCurrent_(0)  
-	, enemiesDupedBest_(0)     
-	, hardMode_(false)         
-	, hardModeTimer_(0.0f)     
-	, playerOne_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, RED)
-	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, ORANGE, KEY_A, KEY_D)
-	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, GREEN, KEY_J, KEY_L)
-	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, YELLOW, KEY_F, KEY_H)
-	, enemyOne_({ 0, 0 }, { 16.0f, 16.0f }, 255.0f, 200.0f, BLUE, screenWidth, screenHeight)
-	, hasBgm_(false)
-	, audioInitialized_(false)
-	, selectedMapType_(MapType::Clean)
-	, powerupSpawnTimer_(0.0f)
+	, winner_(0) // no winner at start
+	, bestSoloTailLength_(0.0f) // initialize best solo tail length
+	, enemiesDupedCurrent_(0)  // initialize current duped enemies
+	, enemiesDupedBest_(0)     // initialize best duped enemies
+	, hardMode_(false)      // hard mode off at start
+	, hardModeTimer_(0.0f)     // initialize hard mode timer
+	, playerOne_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, RED) //sets player paramaters
+	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, ORANGE, KEY_A, KEY_D) //sets player2 paramaters
+	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, GREEN, KEY_J, KEY_L)  //sets player3 paramaters
+	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, { 16.0f, 16.0f }, 200.0f, 180.0f, YELLOW, KEY_F, KEY_H) //sets player4 paramaters
+	, enemyOne_({ 0, 0 }, { 16.0f, 16.0f }, 255.0f, 200.0f, BLUE, screenWidth, screenHeight) //sets enemy paramaters
+	, hasBgm_(false) // bgm not loaded at start
+	, audioInitialized_(false) // audio not initialized at start
+	, selectedMapType_(MapType::Clean) // default to clean map
+	, powerupSpawnTimer_(0.0f) // initialize powerup spawn timer
 
-		{
-			// intialize player wins vector
-			playerWins_ = { 0, 0, 0, 0 };
-			// initialize players and owners according to selectedPlayers_
-			ResetPlayers(selectedPlayers_);
-			// Initialize audio device and load background music
-			InitAudioDevice();
-			audioInitialized_ = IsAudioDeviceReady();
-			if (audioInitialized_)
-			{
-				//bgm loads and plays at half volume, sets bool to true to avoid reloading
-				bgm_ = LoadMusicStream("resources/background.mp3");
-				SetMusicVolume(bgm_, 0.5f);
-				PlayMusicStream(bgm_);
-				hasBgm_ = true;
+{
+	// intialize player wins vector
+	playerWins_ = { 0, 0, 0, 0 };
 
-				// Load sound effects
-				fxMenuDing_ = LoadSound("resources/menu_ding.mp3");
-				fxMenuSelect_ = LoadSound("resources/menu_select.mp3");
-				fxCrash_ = LoadSound("resources/crash.mp3");
-				fxPowerup_ = LoadSound("resources/powerup.mp3");
-			}
-		}
+	// initialize players and owners according to selectedPlayers_
+	ResetPlayers(selectedPlayers_);
+
+	// Initialize audio device and load background music
+	InitAudioDevice();
+	audioInitialized_ = IsAudioDeviceReady();
+	if (audioInitialized_)
+	{
+		//bgm loads and plays at half volume, sets bool to true to avoid reloading
+		bgm_ = LoadMusicStream("resources/background.mp3");
+		SetMusicVolume(bgm_, 0.5f);
+		PlayMusicStream(bgm_);
+		hasBgm_ = true;
+
+		// Load sound effects
+		fxMenuDing_ = LoadSound("resources/menu_ding.mp3");
+		fxMenuSelect_ = LoadSound("resources/menu_select.mp3");
+		fxCrash_ = LoadSound("resources/crash.mp3");
+		fxPowerup_ = LoadSound("resources/powerup.mp3");
+	}
+}
 
 //Player reset function (maybe merge this with destructor somehow?)
 void GameManager::ResetPlayers(int playerCount)
@@ -112,8 +114,8 @@ void GameManager::ResetPlayers(int playerCount)
 	initialPlayerCount_ = playerCount;
 
 	// Reset powerups
-	powerups_.clear(); 
-	powerupSpawnTimer_ = (float)GetRandomValue(2, 5); 
+	powerups_.clear();
+	powerupSpawnTimer_ = (float)GetRandomValue(2, 5);
 }
 
 // Spawns a power-up at a random valid location
@@ -194,27 +196,34 @@ void GameManager::Update(float dt)
 	if (state_ == State::Menu)
 	{
 		// Track if we moved the cursor
-		bool changed = false; 
+		bool changed = false;
 
 		//any change makes a sound
 		// menu input: left/right to change player count, enter/space to start, up/down to change map type, and H for hard mode
 		if (IsKeyPressed(KEY_LEFT)) { selectedPlayers_ = std::max(1, selectedPlayers_ - 1); changed = true; }
 		if (IsKeyPressed(KEY_RIGHT)) { selectedPlayers_ = std::min(4, selectedPlayers_ + 1); changed = true; }
+
+		// Map type selection key up
 		if (IsKeyPressed(KEY_UP))
 		{
 			int type = (int)selectedMapType_;
 			if (type > 0) { selectedMapType_ = (MapType)(type - 1); changed = true; }
 		}
+
+		// Map type selection key down
 		if (IsKeyPressed(KEY_DOWN))
 		{
 			int type = (int)selectedMapType_;
 			if (type < 2) { selectedMapType_ = (MapType)(type + 1); changed = true; }
 		}
+
+		// Hard mode toggle
 		if (IsKeyPressed(KEY_H)) { hardMode_ = !hardMode_; changed = true; }
 
-		// Play Ding on change
+		// Play Ding on change option in menu
 		if (changed && audioInitialized_) PlaySound(fxMenuDing_);
 
+		// Start game on enter/space
 		if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
 		{
 			//Play Swoosh on start
@@ -245,9 +254,10 @@ void GameManager::Update(float dt)
 			powerupSpawnTimer_ = (float)GetRandomValue(5, 10);
 		}
 
+		// Update Powerups every frame
 		for (auto& p : powerups_) p.Update(dt);
 
-		// Check Powerup Collection
+		// Check Powerup Collection by Players
 		for (ITailOwner* o : owners_)
 		{
 			if (!o->IsAlive()) continue;
@@ -269,7 +279,10 @@ void GameManager::Update(float dt)
 
 		// Clean inactive powerups
 		powerups_.erase(std::remove_if(powerups_.begin(), powerups_.end(),
+
+			// lambda to remove inactive powerups
 			[](const PowerUp& p) { return !p.IsActive(); }), powerups_.end());
+
 		//Solo mode enemy logic
 		if (selectedPlayers_ == 1)
 		{
@@ -284,17 +297,17 @@ void GameManager::Update(float dt)
 					int safeMinX = (int)(screenWidth_ * 0.20f);
 					int safeMaxX = (int)(screenWidth_ * 0.80f);
 					Vector2 spawnPos;
-					do 
+					do
 					{
-						spawnPos = {(float)GetRandomValue(safeMinX, safeMaxX), (float)GetRandomValue(50, screenHeight_ - 50)};
-					} 
-					while (Vector2Distance(spawnPos, playerOne_.GetPosition()) < 400.0f); //distance in pixels
+						spawnPos = { (float)GetRandomValue(safeMinX, safeMaxX), (float)GetRandomValue(50, screenHeight_ - 50) };
+					} while (Vector2Distance(spawnPos, playerOne_.GetPosition()) < 400.0f); //distance in pixels
 
 					enemyOne_.Reset(spawnPos);
 					enemyRespawnTimer_ = enemyRespawnDelay_;
 				}
 			}
 			//  MOVEMENT PREDICTION LOGIC
+			// Only run if enemy and player are alive
 			else if (playerOne_.IsAlive())
 			{
 				// Convert positions to Vector2D for math
@@ -317,10 +330,13 @@ void GameManager::Update(float dt)
 			else
 			{
 				// When the Player is dead, enemy returns to center
+				//not sure if this is needed as game should be over if player is dead
+				//Check during final bug testing------------------------------------------------------------------------------------------
+				//------------------------------------------------------------------------------------------
 				enemyOne_.SetTarget({ halfScreenWidth_, halfScreenHeight_ });
 			}
 
-			//  Hard Mode Logic 
+			//  Hard Mode Logic
 			if (hardMode_ && playerOne_.IsAlive())
 			{
 				// Spawn Timer
@@ -337,7 +353,11 @@ void GameManager::Update(float dt)
 
 					// Create new Enemy with random color and add to extraEnemies_ vector
 					Color randomColor = ColorFromHSV((float)GetRandomValue(0, 360), 0.8f, 0.9f);
+
+					// Create new enemy
 					Enemy* newEnemy = new Enemy(spawnPos, { 16.0f, 16.0f }, 260.0f, 210.0f, randomColor, screenWidth_, screenHeight_);
+
+					//Set player reference for enemy AI
 					newEnemy->SetPlayerReference(&playerOne_);
 
 					//Set obstacles reference for enemy collision detection
@@ -350,13 +370,16 @@ void GameManager::Update(float dt)
 
 				// Update extra enemies targets according to player position so the enemies know where to go
 				Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
+
+				// Set target for each extra enemy
 				for (Enemy* e : extraEnemies_)
 				{
-					if (e->IsAlive()) e->SetTarget({ currPosVec.x, currPosVec.y }); // Simple direct tracking
+					// only set target if enemy is alive
+					if (e->IsAlive()) e->SetTarget({ currPosVec.x, currPosVec.y });
 				}
 			}
 
-			// Clean up dead Hard Mode enemies 
+			// Clean up dead Hard Mode enemies
 			// Going backwards through the vector to safely remove elements
 			for (int i = extraEnemies_.size() - 1; i >= 0; i--)
 			{
@@ -392,6 +415,7 @@ void GameManager::Update(float dt)
 		// Main collision checks (skip if in spawn invulnerability)
 		if (spawnInvulnerableTimer_ <= 0.0f)
 		{
+			// Store pending deaths to process after all checks
 			std::vector<ITailOwner*> pendingDeaths;
 
 			for (ITailOwner* o : owners_)
@@ -409,18 +433,18 @@ void GameManager::Update(float dt)
 					markedForDeath = true;
 				}
 
-				// 2. Tail Checks
+				// Tail Checks
 				// Get collision victim if any
 				ITailOwner* victim = GetTailCollisionVictim(o);
 				if (victim && !markedForDeath)
 				{
 					if (isGhost)
 					{
-						// Phase Shift: Do nothing, pass through
+						// Phase Shift, Do nothing, pass through
 					}
 					else if (player && player->HasTailCutter())
 					{
-						// CUTTER LOGIC
+						// Cutter logic
 						player->ConsumeTailCutter();
 
 						// Clear the victim's tail (entire tail for simplicity)
@@ -429,11 +453,15 @@ void GameManager::Update(float dt)
 					}
 					else
 					{
+						// Normal death
 						markedForDeath = true;
 					}
 				}
+
+				// If marked for death, add to pending list
 				if (markedForDeath)
 				{
+					// Add to pending deaths
 					pendingDeaths.push_back(o);
 				}
 			}
@@ -441,9 +469,10 @@ void GameManager::Update(float dt)
 			bool someoneDied = false;
 			for (ITailOwner* victim : pendingDeaths)
 			{
-				// Check IsAlive() again to prevent double-counting 
+				// Check IsAlive() again to prevent double-counting
 				if (victim->IsAlive())
 				{
+					// Kill the victim
 					victim->OwnerKill();
 					if (selectedPlayers_ == 1 && victim != &playerOne_) enemiesDupedCurrent_++;
 					someoneDied = true;
@@ -453,7 +482,7 @@ void GameManager::Update(float dt)
 			if (someoneDied && audioInitialized_) PlaySound(fxCrash_);
 		}
 
-		//  GAME OVER check by counting alive owners
+		// GAME OVER check by counting alive owners (Scope Block)
 		{
 			int aliveCount = 0;
 			ITailOwner* lastAlive = nullptr;
@@ -478,10 +507,9 @@ void GameManager::Update(float dt)
 				{
 					matchOver = true;
 				}
-
+			// Process game-over
 			if (matchOver)
 			{
-				
 				if (aliveCount == 1 && lastAlive != nullptr && initialPlayerCount_ > 1)
 				{
 					// checks index for winner
@@ -517,8 +545,8 @@ void GameManager::Update(float dt)
 			SetMusicVolume(bgm_, 1.0f); // Set volume up to 100 during gameplay
 		}
 	}
-	// else GameOver state: Space = restart players and also calls new mapgen, Enter = back to menu 
-	else 
+	// else GameOver state: Space = restart players and also calls new mapgen, Enter = back to menu
+	else
 	{
 		if (IsKeyPressed(KEY_SPACE))
 		{
@@ -629,7 +657,7 @@ void GameManager::Draw()
 		return;
 	}
 
-	// Draw map 
+	// Draw map
 	mapGen_.Draw();
 
 	// Draw power-ups by iterating through the powerups_ vector and calling Draw on each powerup
@@ -661,7 +689,7 @@ void GameManager::Draw()
 				DrawText(spawnT.c_str(), screenWidth_ / 2 - 220, 10, 30, RED);
 			}
 		}
-		
+
 		/*
 		* Commented out debug info for players
 		std::string dbg2 = "P2 alive: " + std::string(playerTwo_.IsAlive() ? "YES" : "NO")
@@ -772,8 +800,6 @@ GameManager::~GameManager()
 	// Clean up dynamically allocated enemies
 	for (Enemy* e : extraEnemies_) delete e;
 	extraEnemies_.clear();
-
-	
 
 	if (audioInitialized_)
 	{

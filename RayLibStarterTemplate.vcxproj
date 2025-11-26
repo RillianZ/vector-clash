@@ -24,6 +24,7 @@
     <ProjectGuid>{1b063d85-6010-4661-a1fb-b27c915eaa7d}</ProjectGuid>
     <RootNamespace>RayLibStarterTemplate</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>VectorClash</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

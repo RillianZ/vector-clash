@@ -26,10 +26,10 @@ PowerUp::PowerUp(Vector2D startPos, PowerUpType type)
 	}
 }
 
-// Update method (currently static implemented for later moving powerups)
+// Update method for potential movement or animation
 void PowerUp::Update(float dt)
 {
-	// Static: No movement logic needed until i add moving powerups later
+	// Static: No movement logic needed unless i want to try readding moving powerups later
 }
 
 // Draw method
@@ -37,7 +37,7 @@ void PowerUp::Draw()
 {
 	if (!active_) return;
 
-	// Simple rectangle to match player aesthetic
+	// Simple rectangle to match player
 	DrawRectangle((int)position_.x, (int)position_.y, (int)size_, (int)size_, color_);
 
 	// A thin border helps distinguish it from background
