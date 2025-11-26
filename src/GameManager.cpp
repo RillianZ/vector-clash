@@ -16,6 +16,8 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, selectedPlayers_(1) //default to 1 for quicker testing
 	, winner_(0) // no winner at start
 	, bestSoloTailLength_(0.0f) // initialize best solo tail length
+	, matchTimer_(0.0f) // initialize match timer
+	, bestSurvivalTime_(0.0f) // initialize best survival time
 	, enemiesDupedCurrent_(0)  // initialize current duped enemies
 	, enemiesDupedBest_(0)     // initialize best duped enemies
 	, hardMode_(false)      // hard mode off at start
@@ -54,9 +56,12 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 		fxCrash_ = LoadSound("resources/crash.mp3");
 		fxPowerup_ = LoadSound("resources/powerup.mp3");
 	}
+
+	// Load high scores from file
+	LoadHighScores();
 }
 
-//Player reset function (maybe merge this with destructor somehow?)
+//Player reset function
 void GameManager::ResetPlayers(int playerCount)
 {
 	const float sep = 300.0f;
@@ -66,9 +71,10 @@ void GameManager::ResetPlayers(int playerCount)
 	playerThree_.Reset({ halfScreenWidth_, halfScreenHeight_ - sep }, KEY_J, KEY_L, 90.0f);
 	playerFour_.Reset({ halfScreenWidth_, halfScreenHeight_ + sep }, KEY_F, KEY_H, 270.0f);
 
-	// reset invulnerability timer and winner
+	// reset invulnerability timer and winner and matchtimer
 	spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
 	winner_ = 0;
+	matchTimer_ = 0.0f;
 
 	// Reset Solo Stats
 	enemiesDupedCurrent_ = 0;
@@ -149,8 +155,7 @@ void GameManager::SpawnPowerUp()
 	}
 }
 
-// Generic tail collision detection function
-// Returns pointer to victim ITailOwner if collision detected, else nullptr
+//Function returns pointer to victim ITailOwner if collision detected, else nullptr
 ITailOwner* GameManager::GetTailCollisionVictim(ITailOwner* subject)
 {
 	if (!subject->IsAlive()) return nullptr;
@@ -186,587 +191,44 @@ ITailOwner* GameManager::GetTailCollisionVictim(ITailOwner* subject)
 }
 
 // Main per-frame update function
-//Most of the game logic is here!
 void GameManager::Update(float dt)
 {
-	// countdown spawn invul timer if active
+	// Global: countdown spawn invul timer if active
 	if (spawnInvulnerableTimer_ > 0.0f) spawnInvulnerableTimer_ -= dt;
 
-	// Menu state logic
-	if (state_ == State::Menu)
+	// Delegate to helpers via state machine
+	switch (state_)
 	{
-		// Track if we moved the cursor
-		bool changed = false;
+	case State::Menu:
+		UpdateMenu();
+		break;
 
-		//any change makes a sound
-		// menu input: left/right to change player count, enter/space to start, up/down to change map type, and H for hard mode
-		if (IsKeyPressed(KEY_LEFT)) { selectedPlayers_ = std::max(1, selectedPlayers_ - 1); changed = true; }
-		if (IsKeyPressed(KEY_RIGHT)) { selectedPlayers_ = std::min(4, selectedPlayers_ + 1); changed = true; }
+	case State::Running:
+		UpdateRunning(dt);
+		break;
 
-		// Map type selection key up
-		if (IsKeyPressed(KEY_UP))
-		{
-			int type = (int)selectedMapType_;
-			if (type > 0) { selectedMapType_ = (MapType)(type - 1); changed = true; }
-		}
-
-		// Map type selection key down
-		if (IsKeyPressed(KEY_DOWN))
-		{
-			int type = (int)selectedMapType_;
-			if (type < 2) { selectedMapType_ = (MapType)(type + 1); changed = true; }
-		}
-
-		// Hard mode toggle
-		if (IsKeyPressed(KEY_H)) { hardMode_ = !hardMode_; changed = true; }
-
-		// Play Ding on change option in menu
-		if (changed && audioInitialized_) PlaySound(fxMenuDing_);
-
-		// Start game on enter/space
-		if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
-		{
-			//Play Swoosh on start
-			if (audioInitialized_) PlaySound(fxMenuSelect_);
-			ResetPlayers(selectedPlayers_);
-			mapGen_.GenerateMap(selectedMapType_, screenWidth_, screenHeight_);
-			spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
-			state_ = State::Running;
-		}
-		// Update audio stream while in menu
-		if (audioInitialized_ && hasBgm_)
-		{
-			UpdateMusicStream(bgm_);
-			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
-		}
-
-		return;
-	}
-	//Main running state game logic!
-	if (state_ == State::Running)
-	{
-		// POWERUP LOGIC
-		powerupSpawnTimer_ -= dt;
-		if (powerupSpawnTimer_ <= 0.0f)
-		{
-			SpawnPowerUp();
-			if (hardMode_) SpawnPowerUp();
-			powerupSpawnTimer_ = (float)GetRandomValue(5, 10);
-		}
-
-		// Update Powerups every frame
-		for (auto& p : powerups_) p.Update(dt);
-
-		// Check Powerup Collection by Players
-		for (ITailOwner* o : owners_)
-		{
-			if (!o->IsAlive()) continue;
-			mPlayer* player = dynamic_cast<mPlayer*>(o);
-			if (player)
-			{
-				for (auto& pup : powerups_)
-				{
-					if (pup.IsActive() && CheckCollisionRecs(player->GetRect(), pup.GetRect()))
-					{
-						player->ApplyPowerUp(pup.GetType());
-						pup.Deactivate();
-						// Play powerup sound
-						if (audioInitialized_) PlaySound(fxPowerup_);
-					}
-				}
-			}
-		}
-
-		// Clean inactive powerups
-		powerups_.erase(std::remove_if(powerups_.begin(), powerups_.end(),
-
-			// lambda to remove inactive powerups
-			[](const PowerUp& p) { return !p.IsActive(); }), powerups_.end());
-
-		//Solo mode enemy logic
-		if (selectedPlayers_ == 1)
-		{
-			// RESPAWN LOGIC
-			if (!enemyOne_.IsAlive())
-			{
-				enemyRespawnTimer_ -= dt;
-				if (enemyRespawnTimer_ <= 0.0f)
-				{
-					// Pick a spot randomly not to close to player
-					// and within safe X bounds (avoids spawning too close to edges)
-					int safeMinX = (int)(screenWidth_ * 0.20f);
-					int safeMaxX = (int)(screenWidth_ * 0.80f);
-					Vector2 spawnPos;
-					do
-					{
-						spawnPos = { (float)GetRandomValue(safeMinX, safeMaxX), (float)GetRandomValue(50, screenHeight_ - 50) };
-					} while (Vector2Distance(spawnPos, playerOne_.GetPosition()) < 400.0f); //distance in pixels
-
-					enemyOne_.Reset(spawnPos);
-					enemyRespawnTimer_ = enemyRespawnDelay_;
-				}
-			}
-			//  MOVEMENT PREDICTION LOGIC
-			// Only run if enemy and player are alive
-			else if (playerOne_.IsAlive())
-			{
-				// Convert positions to Vector2D for math
-				Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
-				Vector2D prevPosVec = { previousPlayerPos_.x, previousPlayerPos_.y };
-
-				Vector2D velocity = prevPosVec.VectorTowardsTarget(currPosVec);
-
-				// Adjust this to aim further ahead or closer for enemy
-				// We use ScaleVector to multiply the movement vector
-				// basically knowing the players direction and speed and multiplying it and aiming that direction
-				Vector2D aimOffset = velocity.ScaleVector(35.0f);
-
-				// Calculate the predicted point
-				Vector2D predictedPoint = currPosVec.SetVectorOffset(aimOffset);
-
-				// Apply target
-				enemyOne_.SetTarget({ predictedPoint.x, predictedPoint.y });
-			}
-			else
-			{
-				// When the Player is dead, enemy returns to center
-				//not sure if this is needed as game should be over if player is dead
-				//Check during final bug testing------------------------------------------------------------------------------------------
-				//------------------------------------------------------------------------------------------
-				enemyOne_.SetTarget({ halfScreenWidth_, halfScreenHeight_ });
-			}
-
-			//  Hard Mode Logic
-			if (hardMode_ && playerOne_.IsAlive())
-			{
-				// Spawn Timer
-				hardModeTimer_ -= dt;
-				if (hardModeTimer_ <= 0.0f)
-				{
-					hardModeTimer_ = hardModeInterval_;
-
-					// Spawn New Enemy
-					int safeMinX = (int)(screenWidth_ * 0.20f);
-					int safeMaxX = (int)(screenWidth_ * 0.80f);
-					Vector2 spawnPos = { (float)GetRandomValue(safeMinX, safeMaxX),
-										 (float)GetRandomValue(50, screenHeight_ - 50) };
-
-					// Create new Enemy with random color and add to extraEnemies_ vector
-					Color randomColor = ColorFromHSV((float)GetRandomValue(0, 360), 0.8f, 0.9f);
-
-					// Create new enemy
-					Enemy* newEnemy = new Enemy(spawnPos, { 16.0f, 16.0f }, 260.0f, 210.0f, randomColor, screenWidth_, screenHeight_);
-
-					//Set player reference for enemy AI
-					newEnemy->SetPlayerReference(&playerOne_);
-
-					//Set obstacles reference for enemy collision detection
-					newEnemy->SetObstaclesReference(&mapGen_.GetObstacles());
-
-					// Add to extra enemies list and owners list
-					extraEnemies_.push_back(newEnemy);
-					owners_.push_back(newEnemy);
-				}
-
-				// Update extra enemies targets according to player position so the enemies know where to go
-				Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
-
-				// Set target for each extra enemy
-				for (Enemy* e : extraEnemies_)
-				{
-					// only set target if enemy is alive
-					if (e->IsAlive()) e->SetTarget({ currPosVec.x, currPosVec.y });
-				}
-			}
-
-			// Clean up dead Hard Mode enemies
-			// Going backwards through the vector to safely remove elements
-			for (int i = extraEnemies_.size() - 1; i >= 0; i--)
-			{
-				if (!extraEnemies_[i]->IsAlive())
-				{
-					// Remove from owners_ list
-					ITailOwner* deadPtr = extraEnemies_[i];
-					owners_.erase(std::remove(owners_.begin(), owners_.end(), deadPtr), owners_.end());
-
-					// Delete memory
-					delete extraEnemies_[i];
-
-					// Remove from vector
-					extraEnemies_.erase(extraEnemies_.begin() + i);
-				}
-			}
-
-			// Update previous position for the next frame's calculation
-			previousPlayerPos_ = playerOne_.GetPosition();
-		}
-		// update only active owners
-		for (ITailOwner* o : owners_) o->OwnerUpdate(dt);
-
-		if (selectedPlayers_ == 1 && !owners_.empty())
-		{
-			// Update best solo tail length
-			float cur = owners_[0]->GetTailPixelLength();
-			if (cur > bestSoloTailLength_) bestSoloTailLength_ = cur;
-			// Update best enemies duped count
-			if (enemiesDupedCurrent_ > enemiesDupedBest_) enemiesDupedBest_ = enemiesDupedCurrent_;
-		}
-
-		// Main collision checks (skip if in spawn invulnerability)
-		if (spawnInvulnerableTimer_ <= 0.0f)
-		{
-			// Store pending deaths to process after all checks
-			std::vector<ITailOwner*> pendingDeaths;
-
-			for (ITailOwner* o : owners_)
-			{
-				// Skip dead owners
-				if (!o->IsAlive()) continue;
-				// Check if owner is a player and if they are in ghost mode
-				mPlayer* player = dynamic_cast<mPlayer*>(o);
-				bool isGhost = (player && player->IsPhasing());
-				bool markedForDeath = false;
-
-				// Wall Checks
-				if (CheckHeadAgainstMap(o))
-				{
-					markedForDeath = true;
-				}
-
-				// Tail Checks
-				// Get collision victim if any
-				ITailOwner* victim = GetTailCollisionVictim(o);
-				if (victim && !markedForDeath)
-				{
-					if (isGhost)
-					{
-						// Phase Shift, Do nothing, pass through
-					}
-					else if (player && player->HasTailCutter())
-					{
-						// Cutter logic
-						player->ConsumeTailCutter();
-
-						// Clear the victim's tail (entire tail for simplicity)
-						if (mPlayer* vp = dynamic_cast<mPlayer*>(victim)) vp->ClearTail();
-						else if (Enemy* ve = dynamic_cast<Enemy*>(victim)) ve->ClearTail();
-					}
-					else
-					{
-						// Normal death
-						markedForDeath = true;
-					}
-				}
-
-				// If marked for death, add to pending list
-				if (markedForDeath)
-				{
-					// Add to pending deaths
-					pendingDeaths.push_back(o);
-				}
-			}
-			// Execute all deaths simultaneously
-			bool someoneDied = false;
-			for (ITailOwner* victim : pendingDeaths)
-			{
-				// Check IsAlive() again to prevent double-counting
-				if (victim->IsAlive())
-				{
-					// Kill the victim
-					victim->OwnerKill();
-					if (selectedPlayers_ == 1 && victim != &playerOne_) enemiesDupedCurrent_++;
-					someoneDied = true;
-				}
-			}
-			// Play crash sound if anyone died
-			if (someoneDied && audioInitialized_) PlaySound(fxCrash_);
-		}
-
-		// GAME OVER check by counting alive owners (Scope Block)
-		{
-			int aliveCount = 0;
-			ITailOwner* lastAlive = nullptr;
-			for (ITailOwner* o : owners_)
-			{
-				if (o->IsAlive())
-				{
-					++aliveCount;
-					lastAlive = o;
-				}
-			}
-
-			// For multiplayer matches  game-over when one left
-			// For solo mode treat game-over only when player is dead
-			bool matchOver = false;
-			if (initialPlayerCount_ > 1)
-			{
-				if (aliveCount <= 1) matchOver = true;
-			}
-			else // solo game
-				if (!playerOne_.IsAlive())
-				{
-					matchOver = true;
-				}
-			// Process game-over
-			if (matchOver)
-			{
-				if (aliveCount == 1 && lastAlive != nullptr && initialPlayerCount_ > 1)
-				{
-					// checks index for winner
-					int idx = -1;
-					for (size_t i = 0; i < owners_.size(); ++i)
-					{
-						if (owners_[i] == lastAlive) { idx = (int)i; break; }
-					}
-					winner_ = (idx >= 0) ? (idx + 1) : 0;
-				}
-				else
-				{
-					// no one alive sets winner to 0; to catch weird states
-					winner_ = 0;
-				}
-
-				// Increment Score for winner if multiplayer
-				if (winner_ > 0 && winner_ <= 4)
-				{
-					playerWins_[winner_ - 1]++;
-				}
-
-				//sets the game state to game over
-				state_ = State::GameOver;
-			}
-		}
-
-		// Update music stream each frame while running
-		if (audioInitialized_ && hasBgm_)
-		{
-			UpdateMusicStream(bgm_);
-			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
-			SetMusicVolume(bgm_, 1.0f); // Set volume up to 100 during gameplay
-		}
-	}
-	// else GameOver state: Space = restart players and also calls new mapgen, Enter = back to menu
-	else
-	{
-		if (IsKeyPressed(KEY_SPACE))
-		{
-			ResetPlayers(selectedPlayers_);
-			mapGen_.GenerateMap(selectedMapType_, screenWidth_, screenHeight_);
-			state_ = State::Running;
-			winner_ = 0;
-		}
-		else if (IsKeyPressed(KEY_ENTER))
-		{
-			// return to menu so user can change selectedPlayers_
-			state_ = State::Menu;
-		}
-		// Keep updating music while on GameOver screen
-		if (audioInitialized_ && hasBgm_)
-		{
-			UpdateMusicStream(bgm_);
-			if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
-			SetMusicVolume(bgm_, 0.5f); // Set volume to 50%
-		}
+	case State::GameOver:
+		UpdateGameOver();
+		break;
 	}
 }
 
 // Draw current game state (call between BeginDrawing/EndDrawing)
 void GameManager::Draw()
 {
-	// Draw menu
-	if (state_ == State::Menu)
+	switch (state_)
 	{
-		// Draw Dynamic Controls info
-		int startY = 600;
-		DrawText("Controls:", (screenWidth_ - MeasureText("Controls:", 20)) / 2, startY, 20, LIGHTGRAY);
+	case State::Menu:
+		DrawMenu();
+		break;
 
-		int boxWidth = 250;
-		int totalWidth = selectedPlayers_ * boxWidth;
-		int startX = (screenWidth_ - totalWidth) / 2;
+	case State::Running:
+		DrawRunning();
+		break;
 
-		for (int i = 0; i < selectedPlayers_; i++)
-		{
-			int x = startX + (i * boxWidth);
-			Color pColor = WHITE;
-			std::string label = "P" + std::to_string(i + 1);
-			std::string keys = "";
-
-			switch (i)
-			{
-			case 0: pColor = RED;    keys = "LEFT / RIGHT"; break;
-			case 1: pColor = ORANGE; keys = "A / D"; break;
-			case 2: pColor = GREEN;  keys = "J / L"; break;
-			case 3: pColor = YELLOW; keys = "F / H"; break;
-			}
-
-			DrawText(label.c_str(), x + 100, startY + 40, 30, pColor);
-			DrawText(keys.c_str(), x + 60, startY + 80, 20, RAYWHITE);
-		}
-
-		// Hard mode indicator
-		if (hardMode_ == true)
-		{
-			DrawText("HARD MODE ENABLED", screenWidth_ / 2 - 150, 50, 30, BLACK);
-			ClearBackground(RED);
-		}
-
-		std::string title = "VECTOR CLASH";
-		int fs = 80;
-		int tw = MeasureText(title.c_str(), fs);
-		DrawText(title.c_str(), (screenWidth_ - tw) / 2, 120, fs, RAYWHITE);
-
-		std::string instr = "'Arrows' to Select players and maptype, 'H' Toggles Hard mode, 'ENTER' or 'SPACE' to start";
-		int isz = 20;
-		int iw = MeasureText(instr.c_str(), isz);
-		DrawText(instr.c_str(), (screenWidth_ - iw) / 2, 220, isz, LIGHTGRAY);
-
-		// draw selection of players
-		std::string sel = "Players: " + std::to_string(selectedPlayers_);
-		int sfs = 48;
-		int sw = MeasureText(sel.c_str(), sfs);
-		DrawText(sel.c_str(), (screenWidth_ - sw) / 2, 320, sfs, YELLOW);
-
-		// draw selection of map type
-		std::string mapName;
-		std::string mapDesc;
-		switch (selectedMapType_)
-		{
-		case MapType::Clean:
-			mapName = "Map: CLEAN";
-			mapDesc = "No obstacles. Pure skill.";
-			break;
-		case MapType::Fixed:
-			mapName = "Map: FIXED";
-			mapDesc = "Static central obstacles.";
-			break;
-		case MapType::Wave:
-			mapName = "Map: WAVE";
-			mapDesc = "Procedural generated waves.";
-			break;
-		}
-
-		//draws text for map name
-		int mfs = 40;
-		int mw = MeasureText(mapName.c_str(), mfs);
-		DrawText(mapName.c_str(), (screenWidth_ - mw) / 2, 420, mfs, GREEN);
-		//draws text for map description
-		int dfs = 20;
-		int dw = MeasureText(mapDesc.c_str(), dfs);
-		DrawText(mapDesc.c_str(), (screenWidth_ - dw) / 2, 460, dfs, LIGHTGRAY);
-
-		return;
-	}
-
-	// Draw map
-	mapGen_.Draw();
-
-	// Draw power-ups by iterating through the powerups_ vector and calling Draw on each powerup
-	for (auto& p : powerups_) p.Draw();
-
-	//this loop iterates through each ITailOwner pointer in the owners_ vector and calls draw on each
-	for (ITailOwner* o : owners_) o->OwnerDraw();
-
-	// debug overlay/HUD, top left
-	{
-		//Show duped count in HUD for Solo
-		if (selectedPlayers_ == 1)
-		{
-			std::string duped = "Duped: " + std::to_string(enemiesDupedCurrent_);
-			DrawText(duped.c_str(), screenWidth_ - 150, 10, 30, ORANGE);
-
-			std::string dbg = "TailPts: " + std::to_string(playerOne_.GetTailSegments().size());
-			DrawText(dbg.c_str(), 10, 10, 30, WHITE);
-
-			std::string pupTimer = "PowerUp in: " + std::to_string((int)powerupSpawnTimer_);
-			DrawText(pupTimer.c_str(), 10, 80, 20, YELLOW);
-
-			std::string activeCount = "Active P-Ups: " + std::to_string(powerups_.size());
-			DrawText(activeCount.c_str(), 10, 100, 20, YELLOW);
-
-			if (hardMode_)
-			{
-				std::string spawnT = "Hard Mode Reinforcements: " + std::to_string((int)hardModeTimer_);
-				DrawText(spawnT.c_str(), screenWidth_ / 2 - 220, 10, 30, RED);
-			}
-		}
-
-		/*
-		* Commented out debug info for players
-		std::string dbg2 = "P2 alive: " + std::string(playerTwo_.IsAlive() ? "YES" : "NO")
-			+ "  tailPts: " + std::to_string(playerTwo_.GetTailSegments().size())
-			+ "  pos: (" + std::to_string((int)playerTwo_.GetPosition().x) + "," + std::to_string((int)playerTwo_.GetPosition().y) + ")";
-		DrawText(dbg2.c_str(), 10, 30, 16, WHITE);
-
-		std::string timer = "Spawn safe: " + std::to_string((double)spawnInvulnerableTimer_);
-		DrawText(timer.c_str(), 10, 50, 16, YELLOW);
-		*/
-	}
-
-	// GameOver overlay winner/looser message
-	if (state_ == State::GameOver)
-	{
-		// draw different messages for solo vs multiplayer
-		//uses measuretext to center the text on screen
-		//usess snprintf to format the tail length values into strings for display
-		//Might clean this up later
-		if (selectedPlayers_ == 1)
-		{
-			float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
-			std::string msg = "Solo run finished";
-			int fontSize = 40;
-			int textWidth = MeasureText(msg.c_str(), fontSize);
-			DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 80, fontSize, RAYWHITE);
-
-			char buf[128];
-			snprintf(buf, sizeof(buf), "Length: %.0f px (Best: %.0f)", finalLen, bestSoloTailLength_);
-			DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 40, 30, RAYWHITE);
-
-			snprintf(buf, sizeof(buf), "Enemies Duped: %d (Best: %d)", enemiesDupedCurrent_, enemiesDupedBest_);
-			DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2, 30, ORANGE);
-
-			std::string hint = "Space = Retry, Enter = Menu";
-			int hintSize = 20;
-			int hintW = MeasureText(hint.c_str(), hintSize);
-			DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 60, hintSize, LIGHTGRAY);
-		}
-		else
-		{
-			std::string msg;
-			if (winner_ == 1) msg = "Player ONE WINS! Space to restart, Enter for Main menu";
-			else if (winner_ == 2) msg = "Player TWO WINS! Space to restart, Enter for Main menu";
-			else if (winner_ == 3) msg = "Player THREE WINS! Space to restart, Enter for Main menu";
-			else if (winner_ == 4) msg = "Player FOUR WINS! Space to restart, Enter for Main menu";
-			else msg = "DRAW! Space to restart, Enter for Main menu";
-
-			int fontSize = 50;
-			int textWidth = MeasureText(msg.c_str(), fontSize);
-			DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 20, fontSize, RAYWHITE);
-
-			// Draw Scoreboard
-			int scoreY = screenHeight_ / 2 + 100;
-			int scoreGap = 200;
-			int totalScoreW = selectedPlayers_ * scoreGap;
-			int scoreX = (screenWidth_ - totalScoreW) / 2;
-
-			DrawText("SCOREBOARD", (screenWidth_ - MeasureText("SCOREBOARD", 30)) / 2, scoreY - 40, 30, LIGHTGRAY);
-
-			for (int i = 0; i < selectedPlayers_; i++)
-			{
-				Color pColor = WHITE;
-				if (i == 0) pColor = RED;
-				else if (i == 1) pColor = ORANGE;
-				else if (i == 2) pColor = GREEN;
-				else if (i == 3) pColor = YELLOW;
-
-				std::string s = "P" + std::to_string(i + 1) + ": " + std::to_string(playerWins_[i]);
-				DrawText(s.c_str(), scoreX + (i * scoreGap), scoreY, 30, pColor);
-			}
-
-			std::string hint = "Press Space to restart, Enter to return to Menu";
-			int hintSize = 28;
-			int hintW = MeasureText(hint.c_str(), hintSize);
-			DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, scoreY + 80, hintSize, LIGHTGRAY);
-		}
+	case State::GameOver:
+		DrawGameOver();
+		break;
 	}
 }
 
@@ -792,6 +254,564 @@ bool GameManager::CheckHeadAgainstMap(ITailOwner* subject)
 		}
 	}
 	return false;
+}
+
+// Helper Menu Logic
+void GameManager::UpdateMenu()
+{
+	bool changed = false;
+
+	// Input Change Player Count
+	if (IsKeyPressed(KEY_LEFT)) { selectedPlayers_ = std::max(1, selectedPlayers_ - 1); changed = true; }
+	if (IsKeyPressed(KEY_RIGHT)) { selectedPlayers_ = std::min(4, selectedPlayers_ + 1); changed = true; }
+
+	// Input Change Map Type
+	if (IsKeyPressed(KEY_UP))
+	{
+		int type = (int)selectedMapType_;
+		if (type > 0) { selectedMapType_ = (MapType)(type - 1); changed = true; }
+	}
+	if (IsKeyPressed(KEY_DOWN))
+	{
+		int type = (int)selectedMapType_;
+		if (type < 2) { selectedMapType_ = (MapType)(type + 1); changed = true; }
+	}
+
+	// Input Toggle Hard Mode
+	if (IsKeyPressed(KEY_H)) { hardMode_ = !hardMode_; changed = true; }
+
+	// Play Sound on Change
+	if (changed && audioInitialized_) PlaySound(fxMenuDing_);
+
+	// Start Game
+	if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+	{
+		if (audioInitialized_) PlaySound(fxMenuSelect_);
+		ResetPlayers(selectedPlayers_);
+		mapGen_.GenerateMap(selectedMapType_, screenWidth_, screenHeight_);
+		spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
+		state_ = State::Running;
+	}
+
+	// Audio Stream Update
+	if (audioInitialized_ && hasBgm_)
+	{
+		UpdateMusicStream(bgm_);
+		if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+	}
+}
+
+// Helper Game Over Logic
+void GameManager::UpdateGameOver()
+{
+	if (IsKeyPressed(KEY_SPACE))
+	{
+		ResetPlayers(selectedPlayers_);
+		mapGen_.GenerateMap(selectedMapType_, screenWidth_, screenHeight_);
+		state_ = State::Running;
+		winner_ = 0;
+	}
+	else if (IsKeyPressed(KEY_ENTER))
+	{
+		state_ = State::Menu;
+	}
+
+	// Keep music playing at lower volume
+	if (audioInitialized_ && hasBgm_)
+	{
+		UpdateMusicStream(bgm_);
+		if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+		SetMusicVolume(bgm_, 0.5f);
+	}
+}
+
+// Helper RunningState Logic 
+void GameManager::UpdateRunning(float dt)
+{
+	// track time survived in solo mode if player is alive
+	if (selectedPlayers_ == 1 && playerOne_.IsAlive())
+	{
+		matchTimer_ += dt;
+		if (matchTimer_ > bestSurvivalTime_) bestSurvivalTime_ = matchTimer_;
+	}
+	// POWERUP LOGIC
+	powerupSpawnTimer_ -= dt;
+	if (powerupSpawnTimer_ <= 0.0f)
+	{
+		SpawnPowerUp();
+		if (hardMode_) SpawnPowerUp();
+		powerupSpawnTimer_ = (float)GetRandomValue(5, 10);
+	}
+
+	for (auto& p : powerups_) p.Update(dt);
+
+	// Check Powerup Collection
+	for (ITailOwner* o : owners_)
+	{
+		if (!o->IsAlive()) continue;
+		mPlayer* player = dynamic_cast<mPlayer*>(o);
+		if (player)
+		{
+			for (auto& pup : powerups_)
+			{
+				if (pup.IsActive() && CheckCollisionRecs(player->GetRect(), pup.GetRect()))
+				{
+					player->ApplyPowerUp(pup.GetType());
+					pup.Deactivate();
+					if (audioInitialized_) PlaySound(fxPowerup_);
+				}
+			}
+		}
+	}
+
+	// Clean inactive powerups
+	powerups_.erase(std::remove_if(powerups_.begin(), powerups_.end(),
+		[](const PowerUp& p) { return !p.IsActive(); }), powerups_.end());
+
+
+	// SOLO MODE ENEMY LOGIC
+	if (selectedPlayers_ == 1)
+	{
+		// RESPAWN LOGIC
+		if (!enemyOne_.IsAlive())
+		{
+			enemyRespawnTimer_ -= dt;
+			if (enemyRespawnTimer_ <= 0.0f)
+			{
+				int safeMinX = (int)(screenWidth_ * 0.20f);
+				int safeMaxX = (int)(screenWidth_ * 0.80f);
+				Vector2 spawnPos;
+				do
+				{
+					spawnPos = { (float)GetRandomValue(safeMinX, safeMaxX), (float)GetRandomValue(50, screenHeight_ - 50) };
+				} while (Vector2Distance(spawnPos, playerOne_.GetPosition()) < 400.0f);
+
+				enemyOne_.Reset(spawnPos);
+				enemyRespawnTimer_ = enemyRespawnDelay_;
+			}
+		}
+		// MOVEMENT PREDICTION LOGIC
+		else if (playerOne_.IsAlive())
+		{
+			Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
+			Vector2D prevPosVec = { previousPlayerPos_.x, previousPlayerPos_.y };
+			Vector2D velocity = prevPosVec.VectorTowardsTarget(currPosVec);
+			Vector2D aimOffset = velocity.ScaleVector(35.0f);
+			Vector2D predictedPoint = currPosVec.SetVectorOffset(aimOffset);
+			enemyOne_.SetTarget({ predictedPoint.x, predictedPoint.y });
+		}
+		else
+		{
+			enemyOne_.SetTarget({ halfScreenWidth_, halfScreenHeight_ });
+		}
+
+		// HARD MODE LOGIC
+		if (hardMode_ && playerOne_.IsAlive())
+		{
+			hardModeTimer_ -= dt;
+			if (hardModeTimer_ <= 0.0f)
+			{
+				hardModeTimer_ = hardModeInterval_;
+				int safeMinX = (int)(screenWidth_ * 0.20f);
+				int safeMaxX = (int)(screenWidth_ * 0.80f);
+				Vector2 spawnPos = { (float)GetRandomValue(safeMinX, safeMaxX),
+									 (float)GetRandomValue(50, screenHeight_ - 50) };
+
+				Color randomColor = ColorFromHSV((float)GetRandomValue(0, 360), 0.8f, 0.9f);
+				Enemy* newEnemy = new Enemy(spawnPos, { 16.0f, 16.0f }, 260.0f, 210.0f, randomColor, screenWidth_, screenHeight_);
+				newEnemy->SetPlayerReference(&playerOne_);
+				newEnemy->SetObstaclesReference(&mapGen_.GetObstacles());
+
+				extraEnemies_.push_back(newEnemy);
+				owners_.push_back(newEnemy);
+			}
+
+			// Update targets for extra enemies
+			Vector2D currPosVec = { playerOne_.GetPosition().x, playerOne_.GetPosition().y };
+			for (Enemy* e : extraEnemies_)
+			{
+				if (e->IsAlive()) e->SetTarget({ currPosVec.x, currPosVec.y });
+			}
+		}
+
+		// Clean up dead Hard Mode enemies (With Fix for Warning C4267)
+		for (int i = static_cast<int>(extraEnemies_.size()) - 1; i >= 0; i--)
+		{
+			if (!extraEnemies_[i]->IsAlive())
+			{
+				ITailOwner* deadPtr = extraEnemies_[i];
+				owners_.erase(std::remove(owners_.begin(), owners_.end(), deadPtr), owners_.end());
+				delete extraEnemies_[i];
+				extraEnemies_.erase(extraEnemies_.begin() + i);
+			}
+		}
+		previousPlayerPos_ = playerOne_.GetPosition();
+	}
+
+	// UPDATE ALL OWNERS
+	for (ITailOwner* o : owners_) o->OwnerUpdate(dt);
+
+	// Stats Tracking
+	if (selectedPlayers_ == 1 && !owners_.empty())
+	{
+		float cur = owners_[0]->GetTailPixelLength();
+		if (cur > bestSoloTailLength_) bestSoloTailLength_ = cur;
+		if (enemiesDupedCurrent_ > enemiesDupedBest_) enemiesDupedBest_ = enemiesDupedCurrent_;
+	}
+
+	// MAIN COLLISION CHECKS
+	if (spawnInvulnerableTimer_ <= 0.0f)
+	{
+		std::vector<ITailOwner*> pendingDeaths;
+
+		for (ITailOwner* o : owners_)
+		{
+			if (!o->IsAlive()) continue;
+
+			mPlayer* player = dynamic_cast<mPlayer*>(o);
+			bool isGhost = (player && player->IsPhasing());
+			bool markedForDeath = false;
+
+			// Wall Checks
+			if (CheckHeadAgainstMap(o))
+			{
+				markedForDeath = true;
+			}
+
+			// Tail Checks
+			ITailOwner* victim = GetTailCollisionVictim(o);
+			if (victim && !markedForDeath)
+			{
+				if (isGhost) { /* Pass through */ }
+				else if (player && player->HasTailCutter())
+				{
+					// CUTTER LOGIC
+					player->ConsumeTailCutter();
+					if (mPlayer* vp = dynamic_cast<mPlayer*>(victim)) vp->ClearTail();
+					else if (Enemy* ve = dynamic_cast<Enemy*>(victim)) ve->ClearTail();
+				}
+				else
+				{
+					markedForDeath = true;
+				}
+			}
+			if (markedForDeath) pendingDeaths.push_back(o);
+		}
+
+		// Execute Deaths
+		bool someoneDied = false;
+		for (ITailOwner* victim : pendingDeaths)
+		{
+			if (victim->IsAlive())
+			{
+				victim->OwnerKill();
+				if (selectedPlayers_ == 1 && victim != &playerOne_) enemiesDupedCurrent_++;
+				someoneDied = true;
+			}
+		}
+		if (someoneDied && audioInitialized_) PlaySound(fxCrash_);
+	}
+
+	// GAME OVER CHECK
+	int aliveCount = 0;
+	ITailOwner* lastAlive = nullptr;
+	for (ITailOwner* o : owners_)
+	{
+		if (o->IsAlive())
+		{
+			++aliveCount;
+			lastAlive = o;
+		}
+	}
+
+	bool matchOver = false;
+	if (initialPlayerCount_ > 1)
+	{
+		if (aliveCount <= 1) matchOver = true;
+	}
+	else // Solo
+	{
+		if (!playerOne_.IsAlive()) matchOver = true;
+	}
+
+	if (matchOver)
+	{
+		if (aliveCount == 1 && lastAlive != nullptr && initialPlayerCount_ > 1)
+		{
+			int idx = -1;
+			for (size_t i = 0; i < owners_.size(); ++i)
+			{
+				if (owners_[i] == lastAlive) { idx = (int)i; break; }
+			}
+			winner_ = (idx >= 0) ? (idx + 1) : 0;
+		}
+		else
+		{
+			winner_ = 0;
+		}
+
+		if (winner_ > 0 && winner_ <= 4) playerWins_[winner_ - 1]++;
+		if (selectedPlayers_ == 1) SaveHighScores();
+		state_ = State::GameOver;
+	}
+
+	// AUDIO UPDATE
+	if (audioInitialized_ && hasBgm_)
+	{
+		UpdateMusicStream(bgm_);
+		if (!IsMusicStreamPlaying(bgm_)) PlayMusicStream(bgm_);
+		SetMusicVolume(bgm_, 1.0f);
+	}
+}
+
+// Helper Draw Menu
+void GameManager::DrawMenu()
+{
+	// Draw Dynamic Controls info
+	int startY = 600;
+	DrawText("Controls:", (screenWidth_ - MeasureText("Controls:", 20)) / 2, startY, 20, LIGHTGRAY);
+
+	int boxWidth = 250;
+	int totalWidth = selectedPlayers_ * boxWidth;
+	int startX = (screenWidth_ - totalWidth) / 2;
+
+	for (int i = 0; i < selectedPlayers_; i++)
+	{
+		int x = startX + (i * boxWidth);
+		Color pColor = WHITE;
+		std::string label = "P" + std::to_string(i + 1);
+		std::string keys = "";
+
+		switch (i)
+		{
+		case 0: pColor = RED;    keys = "LEFT / RIGHT"; break;
+		case 1: pColor = ORANGE; keys = "A / D"; break;
+		case 2: pColor = GREEN;  keys = "J / L"; break;
+		case 3: pColor = YELLOW; keys = "F / H"; break;
+		}
+
+		DrawText(label.c_str(), x + 100, startY + 40, 30, pColor);
+		DrawText(keys.c_str(), x + 60, startY + 80, 20, RAYWHITE);
+	}
+
+	// Hard mode indicator
+	if (hardMode_)
+	{
+		DrawText("HARD MODE ENABLED", screenWidth_ / 2 - 150, 50, 30, BLACK);
+		ClearBackground(RED);
+	}
+
+	// Title
+	std::string title = "VECTOR CLASH";
+	int fs = 80;
+	int tw = MeasureText(title.c_str(), fs);
+	DrawText(title.c_str(), (screenWidth_ - tw) / 2, 120, fs, RAYWHITE);
+
+	// Instructions
+	std::string instr = "'Arrows' to Select players and maptype, 'H' Toggles Hard mode, 'ENTER' or 'SPACE' to start";
+	int isz = 20;
+	int iw = MeasureText(instr.c_str(), isz);
+	DrawText(instr.c_str(), (screenWidth_ - iw) / 2, 220, isz, LIGHTGRAY);
+
+	// draw selection of players
+	std::string sel = "Players: " + std::to_string(selectedPlayers_);
+	int sfs = 48;
+	int sw = MeasureText(sel.c_str(), sfs);
+	DrawText(sel.c_str(), (screenWidth_ - sw) / 2, 320, sfs, YELLOW);
+
+	// draw selection of map type
+	std::string mapName;
+	std::string mapDesc;
+	switch (selectedMapType_)
+	{
+	case MapType::Clean:
+		mapName = "Map: CLEAN";
+		mapDesc = "No obstacles. Pure skill.";
+		break;
+	case MapType::Fixed:
+		mapName = "Map: FIXED";
+		mapDesc = "Static central obstacles.";
+		break;
+	case MapType::Wave:
+		mapName = "Map: WAVE";
+		mapDesc = "Procedural generated waves.";
+		break;
+	}
+
+	//draws text for map name
+	int mfs = 40;
+	int mw = MeasureText(mapName.c_str(), mfs);
+	DrawText(mapName.c_str(), (screenWidth_ - mw) / 2, 420, mfs, GREEN);
+
+	//draws text for map description
+	int dfs = 20;
+	int dw = MeasureText(mapDesc.c_str(), dfs);
+	DrawText(mapDesc.c_str(), (screenWidth_ - dw) / 2, 460, dfs, LIGHTGRAY);
+
+	// Powerup Legend 
+	int legY = 850;
+	int pSize = 20;
+	int gap = 240; 
+	// Center the block roughly
+	int legendStartX = (screenWidth_ - (3 * gap)) / 2 - 40;
+
+	DrawText("POWERUPS:", (screenWidth_ - MeasureText("POWERUPS:", 20)) / 2, legY - 40, 20, LIGHTGRAY);
+
+	// Speed (Green)
+	DrawRectangle(legendStartX, legY, pSize, pSize, GREEN);
+	DrawRectangleLines(legendStartX, legY, pSize, pSize, RAYWHITE);
+	DrawText("Speed Boost", legendStartX + 30, legY, 20, RAYWHITE);
+
+	// Slow (Lime)
+	DrawRectangle(legendStartX + gap, legY, pSize, pSize, LIME);
+	DrawRectangleLines(legendStartX + gap, legY, pSize, pSize, RAYWHITE);
+	DrawText("Slow Down", legendStartX + gap + 30, legY, 20, RAYWHITE);
+
+	// Ghost (Blue)
+	DrawRectangle(legendStartX + gap * 2, legY, pSize, pSize, SKYBLUE);
+	DrawRectangleLines(legendStartX + gap * 2, legY, pSize, pSize, RAYWHITE);
+	DrawText("Ghost Mode", legendStartX + gap * 2 + 30, legY, 20, RAYWHITE);
+
+	// Cutter (Gold)
+	DrawRectangle(legendStartX + gap * 3, legY, pSize, pSize, GOLD);
+	DrawRectangleLines(legendStartX + gap * 3, legY, pSize, pSize, RAYWHITE);
+	DrawText("Tail Cutter", legendStartX + gap * 3 + 30, legY, 20, RAYWHITE);
+}
+
+// Helper Draw Running Game
+void GameManager::DrawRunning()
+{
+	// Draw map 
+	mapGen_.Draw();
+
+	// Draw power-ups
+	for (auto& p : powerups_) p.Draw();
+
+	// Draw entities (Players + Enemies)
+	for (ITailOwner* o : owners_) o->OwnerDraw();
+
+	// HUD / Debug Overlay
+	// Show duped count in HUD for Solo
+	if (selectedPlayers_ == 1)
+	{
+		std::string duped = "Duped: " + std::to_string(enemiesDupedCurrent_);
+		DrawText(duped.c_str(), screenWidth_ - 150, 10, 30, ORANGE);
+
+		std::string dbg = "TailPts: " + std::to_string(playerOne_.GetTailSegments().size());
+		DrawText(dbg.c_str(), 10, 10, 30, WHITE);
+
+		std::string pupTimer = "PowerUp in: " + std::to_string((int)powerupSpawnTimer_);
+		DrawText(pupTimer.c_str(), 10, 80, 20, YELLOW);
+
+		std::string activeCount = "Active P-Ups: " + std::to_string(powerups_.size());
+		DrawText(activeCount.c_str(), 10, 100, 20, YELLOW);
+
+		if (hardMode_)
+		{
+			std::string spawnT = "Hard Mode Reinforcements: " + std::to_string((int)hardModeTimer_);
+			DrawText(spawnT.c_str(), screenWidth_ / 2 - 220, 10, 30, RED);
+		}
+	}
+}
+
+// Helper Draw GameOver
+void GameManager::DrawGameOver()
+{
+	// draw messages for solo
+	if (selectedPlayers_ == 1)
+	{
+		//Display "Game Over" message
+		float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
+		std::string msg = "Solo run finished";
+		int fontSize = 40;
+		int textWidth = MeasureText(msg.c_str(), fontSize);
+		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 100, fontSize, RAYWHITE);
+
+		//Display length score
+		char buf[128];
+		snprintf(buf, sizeof(buf), "Length: %.0f px (Best: %.0f)", finalLen, bestSoloTailLength_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 50, 30, BLUE);
+
+		//Display time score
+		snprintf(buf, sizeof(buf), "Time Alive: %.2fs (Best: %.2fs)", matchTimer_, bestSurvivalTime_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 10, 30, RAYWHITE);
+
+		//Display duped score
+		snprintf(buf, sizeof(buf), "Enemies Duped: %d (Best: %d)", enemiesDupedCurrent_, enemiesDupedBest_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 + 30, 30, ORANGE);
+
+		// Hint to restart or menu
+		std::string hint = "Space = Retry, Enter = Menu";
+		int hintSize = 20;
+		int hintW = MeasureText(hint.c_str(), hintSize);
+		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 60, hintSize, LIGHTGRAY);
+	}
+	else // draw messages for Multiplayer
+	{
+		std::string msg;
+		if (winner_ == 1) msg = "Player ONE WINS! Space to restart, Enter for Main menu";
+		else if (winner_ == 2) msg = "Player TWO WINS! Space to restart, Enter for Main menu";
+		else if (winner_ == 3) msg = "Player THREE WINS! Space to restart, Enter for Main menu";
+		else if (winner_ == 4) msg = "Player FOUR WINS! Space to restart, Enter for Main menu";
+		else msg = "DRAW! Space to restart, Enter for Main menu";
+
+		int fontSize = 50;
+		int textWidth = MeasureText(msg.c_str(), fontSize);
+		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 20, fontSize, RAYWHITE);
+
+		// Draw Scoreboard
+		int scoreY = screenHeight_ / 2 + 100;
+		int scoreGap = 200;
+		int totalScoreW = selectedPlayers_ * scoreGap;
+		int scoreX = (screenWidth_ - totalScoreW) / 2;
+
+		DrawText("SCOREBOARD", (screenWidth_ - MeasureText("SCOREBOARD", 30)) / 2, scoreY - 40, 30, LIGHTGRAY);
+
+		for (int i = 0; i < selectedPlayers_; i++)
+		{
+			Color pColor = WHITE;
+			if (i == 0) pColor = RED;
+			else if (i == 1) pColor = ORANGE;
+			else if (i == 2) pColor = GREEN;
+			else if (i == 3) pColor = YELLOW;
+
+			std::string s = "P" + std::to_string(i + 1) + ": " + std::to_string(playerWins_[i]);
+			DrawText(s.c_str(), scoreX + (i * scoreGap), scoreY, 30, pColor);
+		}
+
+		std::string hint = "Press Space to restart, Enter to return to Menu";
+		int hintSize = 28;
+		int hintW = MeasureText(hint.c_str(), hintSize);
+		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, scoreY + 80, hintSize, LIGHTGRAY);
+	}
+}
+
+// save high scores to file
+void GameManager::SaveHighScores()
+{
+	std::ofstream file(saveFileName_);
+	if (file.is_open())
+	{
+		// Write stats line by line
+		file << bestSurvivalTime_ << "\n";
+		file << bestSoloTailLength_ << "\n";
+		file << enemiesDupedBest_ << "\n";
+		file.close();
+	}
+}
+
+// Load high scores from file
+void GameManager::LoadHighScores()
+{
+	std::ifstream file(saveFileName_);
+	if (file.is_open())
+	{
+		// Read stats in the same order
+		file >> bestSurvivalTime_;
+		file >> bestSoloTailLength_;
+		file >> enemiesDupedBest_;
+		file.close();
+	}
 }
 
 // Destructor

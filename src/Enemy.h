@@ -27,20 +27,14 @@ public:
 	virtual void OwnerDraw() override;
 	virtual void OwnerKill() override;
 	virtual bool IsAlive() const override;
-
 	virtual Vector2 GetPosition() const override;
 	virtual Vector2 GetSize() const override;
-	virtual const std::deque<Vector2>& GetTailSegments() const override;
-	virtual float GetTailPixelLength() const override;
 
 	// Reset enemy to initial state
 	void Reset(Vector2 startPos);
 
 	//  Enemy Specific Methods
 	void SetTarget(Vector2 targetPos);
-
-	// Tail length control (pixels)
-	void SetCurrentTailLength(float length);
 
 	//  Clear tail segments
 	void ClearTail();
@@ -57,8 +51,6 @@ private:
 	float currentAngle_; // Degrees
 	float turnSpeed_; // // Degrees per second same as player
 
-	// Store tail as Raylib Vector2 because ITailOwner requires it
-	std::deque<Vector2> tailSegments_;
 	// Pointer to player for tail checks
 	mPlayer* playerRef_;
 
@@ -72,8 +64,5 @@ private:
 	bool isAlive_;
 
 	// Tail length control (pixels)
-	float tailLengthPixels_;
-	float trailSampleDistance_;
-	size_t maxTrailPoints_;
 	float growthRatePixelsPerSecond_;
 };

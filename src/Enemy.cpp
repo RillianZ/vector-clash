@@ -25,14 +25,9 @@ Enemy::Enemy(Vector2 startPos, Vector2 size, float speed, float turnSpeed, Color
 	, obstaclesRef_(nullptr)  // Initialize obstacle to nullptr
 	, screenWidth_(screenW) // Initialize screen width
 	, screenHeight_(screenH) // Initialize screen height
-	, tailLengthPixels_(200.0f)     // Start same length as player
-	, trailSampleDistance_(3.0f) // Sample every 3 pixels
-	, maxTrailPoints_(2) // Will be calculated properly below
 	, growthRatePixelsPerSecond_(40.0f) // Grow same speed as player
 {
-	//constructor setup tail parameters
-	maxTrailPoints_ = static_cast<size_t>(tailLengthPixels_ / trailSampleDistance_);
-	tailSegments_.push_back({ position_.x, position_.y });
+	ResetTail({ position_.x, position_.y });
 }
 
 //sets the obstacles reference for collision detection
@@ -56,30 +51,29 @@ void Enemy::SetTarget(Vector2 targetPos)
 // Reset enemy to initial state
 void Enemy::Reset(Vector2 startPos)
 {
+	// Reset position
 	position_ = { startPos.x, startPos.y };
-	tailSegments_.clear();
 
 	// Reset angle (90 = Down)
 	currentAngle_ = 90.0f;
-	// Start with one tail segment at current position
-	tailSegments_.push_back({ position_.x, position_.y });
+	
 	// Set alive
 	isAlive_ = true;
 
 	// Reset tail length parameters
 	tailLengthPixels_ = 200.0f;
-	// Recalculate max trail points based on tail length and sample distance
-	maxTrailPoints_ = static_cast<size_t>(tailLengthPixels_ / trailSampleDistance_);
+	
+	// Reset trail history (Parent Helper)
+	ResetTail({ position_.x, position_.y });
 }
 
 // Clears the tail segments
 void Enemy::ClearTail()
 {
-	tailSegments_.clear();
-	tailSegments_.push_back({ position_.x, position_.y });
+	ResetTail({ position_.x, position_.y });
 }
 
-// The "Enemy Cone Check" function
+// The "Enemy Cone Check/Whiskers" function
 bool Enemy::CheckCollisionAhead(Vector2D start, Vector2D dir, float lookAheadDist)
 {
 	//Checking 3 stages ahead for more reliable detection
@@ -93,7 +87,7 @@ bool Enemy::CheckCollisionAhead(Vector2D start, Vector2D dir, float lookAheadDis
 		float currentDist = stepDist * k;
 
 		// Calculate the tip of the feelers using Vector2D math
-		Vector2D tip = start.SetVectorOffset(dir.ScaleVector(lookAheadDist));
+		Vector2D tip = start.SetVectorOffset(dir.ScaleVector(currentDist));
 
 		//  Wall Checks - Screen Bounds
 		// buffer is to avoid getting too close to edge (Tweakable)
@@ -207,39 +201,12 @@ void Enemy::OwnerUpdate(float dt)
 	position_ = position_.SetVectorOffset(velocity);
 
 	// Tail Logic
-	Vector2 currentPosRay = Vector2{ position_.x, position_.y };
-
-	if (tailSegments_.empty())
-	{
-		tailSegments_.push_back(currentPosRay);
-		return;
-	}
-
-	// Get last segment as Vector2D for distance check
-	Vector2 last = tailSegments_.back();
-	Vector2D lastVec = { last.x, last.y };
-
-	// Sample new position into tail if moved enough
-	if (position_.DistanceToTarget(lastVec) >= trailSampleDistance_)
-	{
-		tailSegments_.push_back(currentPosRay);
-	}
-	else
-	{
-		// Update head visual using last segment
-		if (!tailSegments_.empty()) tailSegments_.back() = currentPosRay;
-	}
-
 	//Grow Length Smoothly
 	tailLengthPixels_ += growthRatePixelsPerSecond_ * dt;
-	maxTrailPoints_ = static_cast<size_t>(tailLengthPixels_ / trailSampleDistance_);
-	if (maxTrailPoints_ < 2) maxTrailPoints_ = 2;
 
-	//Trim old parts
-	while (tailSegments_.size() > maxTrailPoints_)
-	{
-		tailSegments_.pop_front();
-	}
+	// Parent class helper to update tail segments
+	UpdateTailLogic({ position_.x, position_.y });
+	
 }
 
 // Draw owner (tail + head)
@@ -269,7 +236,7 @@ void Enemy::OwnerDraw()
 void Enemy::OwnerKill()
 {
 	isAlive_ = false;
-	tailSegments_.clear();
+	ResetTail({ position_.x, position_.y });
 }
 
 // Check if owner is alive
@@ -288,26 +255,4 @@ Vector2 Enemy::GetPosition() const
 Vector2 Enemy::GetSize() const
 {
 	return size_;
-}
-
-// Read-only access to tail segments
-const std::deque<Vector2>& Enemy::GetTailSegments() const
-{
-	return tailSegments_;
-}
-
-// Expose tail "pixel length" to managers for scoring, etc.
-float Enemy::GetTailPixelLength() const
-{
-	return tailLengthPixels_;
-}
-
-// Tail length control (pixels)
-void Enemy::SetCurrentTailLength(float length)
-{
-	if (length < 20.0f) length = 20.0f;
-	tailLengthPixels_ = length;
-
-	// Recalculate max points so the loop in Update knows when to stop trimming
-	maxTrailPoints_ = static_cast<size_t>(tailLengthPixels_ / trailSampleDistance_);
 }

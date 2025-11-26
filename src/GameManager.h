@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <deque>
+#include <fstream>
 #include "mPlayer.h"
 #include "ITailOwner.h"
 #include <raylib.h>
@@ -52,6 +53,8 @@ private:
 
 	// Solo mode tracking
 	float bestSoloTailLength_;
+	float matchTimer_;       
+	float bestSurvivalTime_; 
 
 	//  Solo Mode Stats
 	int enemiesDupedCurrent_;
@@ -60,13 +63,33 @@ private:
 	// Hard Mode
 	bool hardMode_;
 	float hardModeTimer_;
-	const float hardModeInterval_ = 5.0f; // Spawn timer in seconds
-	std::vector<Enemy*> extraEnemies_; // Dynamic enemies container (used to avoid memory leaks)
+
+	// Spawn timer in seconds
+	const float hardModeInterval_ = 5.0f; 
+
+	// Dynamic enemies container (used to avoid memory leaks)
+	std::vector<Enemy*> extraEnemies_; 
 
 	// PowerUps
 	std::vector<PowerUp> powerups_;
 	float powerupSpawnTimer_;
 	void SpawnPowerUp();
+
+	// Save file name
+	const std::string saveFileName_ = "vector_clash_save.txt";
+
+	// -- Private Helper Functions for State Logic --
+	void UpdateMenu();
+	void UpdateRunning(float dt);
+	void UpdateGameOver();
+
+	// Persistence Helpers
+	void LoadHighScores();
+	void SaveHighScores();
+
+	void DrawMenu();
+	void DrawRunning();
+	void DrawGameOver();
 
 	// Players constructed here
 	mPlayer playerOne_;

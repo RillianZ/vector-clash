@@ -13,17 +13,15 @@ public:
 	// Constructor accepts optional per-instance keys
 	mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotationSpeed, Color pColor, int pKeyLeft = KEY_LEFT, int pKeyRight = KEY_RIGHT);
 
-	void mPHandleInput(float deltaTime); // Handles player input for rotation
-	void mPUpdate(float deltaTime); // Updates the player position and trail
-	void mPDraw(); // Draws the player and its trail
-	void mPKill(); // Kills the player
+	void HandleInput(float deltaTime); // Handles player input for rotation
+	void Update(float deltaTime); // Updates the player position and trail
+	void Draw(); // Draws the player and its trail
+	void Kill(); // Kills the player
 
 	// ITailOwner implementation
+	bool IsAlive() const override;
 	Vector2 GetPosition() const override;
 	Vector2 GetSize() const override;
-	const std::deque<Vector2>& GetTailSegments() const override;
-	bool IsAlive() const override;
-	float GetTailPixelLength() const override;
 
 	// Lifecycle hooks (used by GameManager)
 	void OwnerUpdate(float deltaTime) override; // calls input+update
@@ -32,9 +30,6 @@ public:
 
 	// Other publicly available utilities
 	void CutTrail(size_t cutIndex);
-
-	// Tail length control (pixels)
-	void SetTailLength(float pixels);
 
 	// Continuous growth: pixels added to tail length per second
 	void SetTailGrowthRate(float pixelsPerSecond);
@@ -59,35 +54,26 @@ public:
 	Rectangle GetRect() const;
 
 private:
-
-	Vector2 m_position;
-	Vector2 m_size;
-	float m_speed;
-	float m_baseSpeed;
-	float m_rotationSpeed;
 	// Direction angle in degrees (0 = right, 90 = down, etc.)
-	float m_directionAngle;
-	Color m_color;
-	bool m_isAlive;
-
-	// Trail storage (deque so popping front is O(1))
-	std::deque<Vector2> m_trail;
-
-	// Trail sampling & length control
-	float m_tailLengthPixels;        // total length of tail in pixels
-	float m_trailSampleDistance;     // minimum distance between stored trail points (pixels)
-	size_t m_maxTrailPoints;         // computed from tailLength / sampleDistance
+	float directionAngle_;
+	Vector2 position_;
+	Vector2 size_;
+	float speed_;
+	float baseSpeed_;
+	float rotationSpeed_;
+	Color color_;
+	bool isAlive_;
 
 	// Continuous growth
-	bool m_tailGrowthEnabled;
-	float m_growthRatePixelsPerSecond;
+	bool tailGrowthEnabled_;
+	float growthRatePixelsPerSecond_;
 
 	// Per-instance control keys
-	int m_keyLeft;
-	int m_keyRight;
+	int keyLeft_;
+	int keyRight_;
 
 	// Power-up states
-	float m_speedTimer;
-	float m_ghostTimer;
-	bool m_hasTailCutter;
+	float speedTimer_;
+	float ghostTimer_;
+	bool hasTailCutter_;
 };
