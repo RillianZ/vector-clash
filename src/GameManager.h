@@ -9,6 +9,15 @@
 #include "MapGenerator.h"
 #include "PowerUp.h"
 
+//structure to hold tail hit results
+struct TailHitResult
+{
+	//who got hit?
+	ITailOwner* victim; 
+	//at what point of tail?
+	size_t index;      
+};
+
 class GameManager
 {
 public:
@@ -33,8 +42,12 @@ private:
 	float spawnInvulnerableTimer_;
 
 	// Current game state
-	enum class State { Menu, Running, GameOver };
-	State state_;
+	enum class gameState { Intro, Menu, Running, GameOver };
+	gameState gameState_;
+
+	//Intro state timer
+	float introTimer_ = 0.0f;;
+	float introDuration_ = 6.0f;
 
 	//number of players selected
 	int selectedPlayers_;
@@ -60,9 +73,13 @@ private:
 	int enemiesDupedCurrent_;
 	int enemiesDupedBest_;
 
-	// Hard Mode
-	bool hardMode_;
+
+	// Difficulty and hard mode timer
+	enum class Difficulty { Normal, Easy, Hard, Chaos, Count };
+	Difficulty difficulty_;
 	float hardModeTimer_;
+
+	
 
 	// Spawn timer in seconds
 	const float hardModeInterval_ = 5.0f; 
@@ -78,19 +95,35 @@ private:
 	// Save file name
 	const std::string saveFileName_ = "vector_clash_save.txt";
 
-	// -- Private Helper Functions for State Logic --
+	// Private Helper Functions for State Logic
+	void UpdateIntro();
 	void UpdateMenu();
 	void UpdateRunning(float dt);
 	void UpdateGameOver();
 
-	// Persistence Helpers
-	void LoadHighScores();
-	void SaveHighScores();
-
+	// Private Helper Functions for Drawing
+	void DrawIntro();
 	void DrawMenu();
 	void DrawRunning();
 	void DrawGameOver();
 
+	// Private Helper Functions for UpdateRunning decomposition
+	// Helper for updates
+	void UpdatePowerups(float dt);
+	
+	// Handles Base Enemy + Reinforcements (Chaos Logic)
+	void UpdateSoloAI(float dt);
+
+	// Handles Deaths and Cuts
+	void HandleCollisions(); 
+
+	// Handles Win conditions
+	void CheckGameOver();        
+
+	// Persistence Helpers
+	void LoadHighScores();
+	void SaveHighScores();
+	
 	// Players constructed here
 	mPlayer playerOne_;
 	mPlayer playerTwo_;
@@ -116,20 +149,34 @@ private:
 	// Map selection
 	MapType selectedMapType_;
 
-	// Returns pointer to collided tail owner, or nullptr if none
-	ITailOwner* GetTailCollisionVictim(ITailOwner* subject);
+	// Bike type selection
+	BikeType playerLoadouts_[4];
+
+	// Tail collision detection helper
+	TailHitResult GetTailCollisionVictim(ITailOwner* subject);
 
 	// Check head against map obstacles
 	bool CheckHeadAgainstMap(ITailOwner* subject);
 
-	// Background music
-	Music bgm_;
+	// Background music as vector
+	std::vector<Music> bgmTracks_;
+	int currentTrackIndex_;
 	bool hasBgm_ = false;
 	// Sound effects
 	Sound fxMenuDing_;
 	Sound fxMenuSelect_;
 	Sound fxCrash_;
 	Sound fxPowerup_;
+	Sound fxIntroSound_;
+	Sound fxSlice_;
+	Sound fxSpeedup_;
+	Sound fxSpeeddown_;
+	Sound fxGhost_;
+	Sound fxGameWinSound_;
+
+	// Intro sound played flag
+	bool introSoundPlayed_ = false;
 
 	bool audioInitialized_ = false;
+
 };

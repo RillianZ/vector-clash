@@ -139,8 +139,6 @@ void Enemy::OwnerUpdate(float dt)
 {
 	if (!isAlive_) return;
 
-	// STEERING & MOVEMENT
-
 	//  Calculate Forward Direction
 	// Using CircularMotion helper to get direction vector from angle
 	Vector2D currentDir = Vector2D::CircularMotion({ 0,0 }, 1.0f, currentAngle_ * DEG2RAD);
@@ -204,6 +202,11 @@ void Enemy::OwnerUpdate(float dt)
 	//Grow Length Smoothly
 	tailLengthPixels_ += growthRatePixelsPerSecond_ * dt;
 
+	// Adjust trail sample distance based on speed to avoid draw bugs
+	if (speed_ <= 110.0f)      trailSampleDistance_ = 1.0f;
+	else if (speed_ < 190.0f)  trailSampleDistance_ = 2.0f;
+	else                       trailSampleDistance_ = 3.0f;
+
 	// Parent class helper to update tail segments
 	UpdateTailLogic({ position_.x, position_.y });
 	
@@ -214,19 +217,31 @@ void Enemy::OwnerDraw()
 {
 	if (!isAlive_) return;
 
-	// Draw Tail
+	// DRAW TAIL (Neon AI Look)
 	if (tailSegments_.size() > 1)
 	{
+		Color glowColor = Fade(color_, 0.3f);
+		Color coreColor = Fade(WHITE, 0.8f); // White core makes them look synthetic
+
+		// Glow Pass
 		for (size_t i = 0; i < tailSegments_.size() - 1; ++i)
 		{
-			// DrawLineV draws a standard thin line between two points
-			DrawLineV(tailSegments_[i], tailSegments_[i + 1], Fade(color_, 0.5f));
+			DrawLineEx(tailSegments_[i], tailSegments_[i + 1], 6.0f, glowColor);
+		}
+
+		//  Core color pass
+		for (size_t i = 0; i < tailSegments_.size() - 1; ++i)
+		{
+			DrawLineEx(tailSegments_[i], tailSegments_[i + 1], 1.5f, coreColor);
 		}
 	}
 
 	// Draw Head
-	// Convert logic position (Vector2D) to render position (Vector2)
 	Vector2 drawPos = { position_.x - size_.x / 2.0f, position_.y - size_.y / 2.0f };
+
+	// Glow backing
+	DrawRectangleV({ drawPos.x - 2, drawPos.y - 2 }, { size_.x + 4, size_.y + 4 }, Fade(color_, 0.5f));
+	// Core
 	DrawRectangleV(drawPos, size_, color_);
 }
 
@@ -255,4 +270,17 @@ Vector2 Enemy::GetPosition() const
 Vector2 Enemy::GetSize() const
 {
 	return size_;
+}
+
+// Sets the enemy speed (and scales turn speed to match agility)
+void Enemy::SetSpeed(float newSpeed)
+{
+	// Calculate the ratio of change 
+	float ratio = newSpeed / speed_;
+
+	//Apply to speed
+	speed_ = newSpeed;
+
+	// Scale turn speed so the turning radius stays consistent
+	turnSpeed_ *= ratio;
 }

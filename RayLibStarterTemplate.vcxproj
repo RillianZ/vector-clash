@@ -152,6 +152,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\GameManager.h" />
+    <ClInclude Include="src\BikeConfig.h" />
     <ClInclude Include="src\MapGenerator.h" />
     <ClInclude Include="src\Enemy.h" />
     <ClInclude Include="src\ITailOwner.h" />

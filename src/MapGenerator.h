@@ -8,7 +8,11 @@ enum class MapType
 {
 	Clean,      // No obstacles (Stage 1)
 	Fixed,      // 4 static cubes in the middle (Stage 2)
-	Wave        // Math-generated  Sin waves (Stage 3)
+	Wave,       // Math-generated  Sin waves (Stage 3)
+	Donut,		// Circular (Stage 4)
+	Grid,	// Vertical obstacles (Stage 5)
+	Chaos, // Random obstacles every restart (Special Mode)
+	Count		//helper to count number of map types 
 };
 
 // MapGenerator class handles map creation and obstacle management
@@ -23,9 +27,10 @@ public:
 
 	// Main function to build the map based on the selected type
 	void GenerateMap(MapType type, int screenWidth, int screenHeight);
+	void GenerateChaosMap(int screenW, int screenH);
 
 	// Draws all active obstacles
-	void Draw();
+	void Draw(Color gridColor, bool isPulsating);
 
 	// Returns the list of obstacles for collision detection, const to avoid bugs
 	const std::vector<Rectangle>& GetObstacles() const;
@@ -37,4 +42,7 @@ private:
 	// Internal helpers to keep the code clean
 	void GenerateFixedMap(int screenW, int screenH);
 	void GenerateWaveMap(int screenW, int screenH);
+	void GenerateDonutMap(int screenW, int screenH);
+	void GenerateGridMap(int screenW, int screenH);
+	
 };

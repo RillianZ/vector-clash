@@ -22,6 +22,9 @@ public:
 	// Set reference to obstacles for collision detection
 	void SetObstaclesReference(const std::vector<Rectangle>* obstaclesRef);
 
+	// Set enemy speed
+	void SetSpeed(float newSpeed);
+
 	//  ITailOwner Interface
 	virtual void OwnerUpdate(float dt) override;
 	virtual void OwnerDraw() override;

@@ -27,7 +27,11 @@ public:
 	// Static Methods for common movements
 	//static means they dont need an instance of the class to operate
 	static Vector2D CosineMovement(Vector2D inCenter, float inAmplitude, float inAngle);
+	// Generates a point moving in a sine wave pattern along the Y-axis
+	static Vector2D SineMovement(Vector2D inCenter, float inAmplitude, float inAngle);
+	// Generates a point moving in a circular motion around a center point
 	static Vector2D CircularMotion(Vector2D inCenter, float inRadius, float inAngle);
 	// Helper to normalize angle difference to -180 to 180 range
 	static float NormalizeAngleDiff(float diff);
+
 };

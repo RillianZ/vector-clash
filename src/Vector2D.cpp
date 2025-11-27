@@ -81,7 +81,15 @@ Vector2D Vector2D::CircularMotion(Vector2D inCenter, float inRadius, float inAng
 // Normalizes an angle difference to the range -180 to 180 degrees
 float Vector2D::NormalizeAngleDiff(float diff)
 {
-	while (diff > 180.0f) diff -= 360.0f;
-	while (diff < -180.0f) diff += 360.0f;
-	return diff;
+	// Modulo arithmetic handles large numbers instantly without looping
+	//not sure about this, but it seems to work fine
+	diff = fmodf(diff + 180.0f, 360.0f);
+	if (diff < 0) diff += 360.0f;
+	return diff - 180.0f;
+}
+
+Vector2D Vector2D::SineMovement(Vector2D inCenter, float inAmplitude, float inAngle)
+{
+	// Modifies Y based on Sine, keeps X constant (relative to center)
+	return { inCenter.x, inCenter.y + inAmplitude * sinf(inAngle) };
 }

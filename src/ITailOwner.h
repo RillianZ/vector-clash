@@ -12,8 +12,6 @@ public:
 	// Virtual destructor for proper cleanup of derived classes
 	virtual ~ITailOwner() = default;
 
-	// Basic data access
-
 	// top-left of head
 	virtual Vector2 GetPosition() const = 0;
 
@@ -25,8 +23,6 @@ public:
 
 	//  Check if owner is alive
 	virtual bool IsAlive() const = 0;
-
-	// Lifecycle/update hooks so managers can call uniformly:
 
 	// Update (input + position) per-frame
 	virtual void OwnerUpdate(float deltaTime) = 0;
@@ -48,7 +44,22 @@ public:
 		tailLengthPixels_ = pixels;
 	}
 
-	//protected allows derived classes to access these members
+	void CutTailAtIndex(size_t index)
+	{
+		if (index >= tailSegments_.size()) return;
+		//Remove segments
+		size_t removeCount = index + 1;
+		for (size_t i = 0; i < removeCount && !tailSegments_.empty(); i++)
+		{
+			tailSegments_.pop_front();
+		}
+		//Recalculate Length Stats
+		tailLengthPixels_ = (float)tailSegments_.size() * trailSampleDistance_;
+
+		//Safety clamp
+		if (tailLengthPixels_ < 20.0f) tailLengthPixels_ = 20.0f;
+	}
+
 protected: 
 
 	// Shared tail data

@@ -2,47 +2,56 @@
 #include "raymath.h"
 
 //Constructor implement : can accept custom control
-mPlayer::mPlayer(Vector2 pStartPos, Vector2 pSize, float pSpeed, float pRotationSpeed, Color pColor, int pKeyLeft, int pKeyRight)
-	:
-	position_(pStartPos), // starting position
-	size_(pSize), // size of head
-	speed_(pSpeed), // pixels per second
-	baseSpeed_(pSpeed), // store base speed
-	rotationSpeed_(pRotationSpeed), // degrees per second rotate
-	directionAngle_(90.0f), // facing down initially
-	color_(pColor), // default color
-	isAlive_(true), // player starts alive
-	tailGrowthEnabled_(true),   // tail grows continuously by default
-	growthRatePixelsPerSecond_(40.0f),      // pixels per second when continuous
-	keyLeft_(pKeyLeft), //Standard key for left movement
-	keyRight_(pKeyRight), //Standard key for right movement
-	speedTimer_(0.0f),       //timers for power-ups (speed)
-	ghostTimer_(0.0f),       //timers for power-ups (ghost)
-	hasTailCutter_(false)  // starts without cutter
+mPlayer::mPlayer(Vector2 startPos, BikeConfig config, int keyLeft, int keyRight, float startAngle, Color idColor)
+	: type_(BikeType::Standard) // Default
+	, position_(startPos) // starting position
+	, size_({ config.size, config.size }) // size of head
+	, speed_(config.speed) // pixels per second
+	, baseSpeed_(config.speed)   // store base speed
+	, rotationSpeed_(config.turnSpeed) // degrees per second rotate
+	, color_(config.color) // default color
+	, directionAngle_(startAngle) // facing down initially
+	, keyLeft_(keyLeft) //Standard key for left movement
+	, keyRight_(keyRight)   //Standard key for right movement
+	, isAlive_(true) // player starts alive
+	, tailGrowthEnabled_(true) // tail grows continuously by default
+	, growthRatePixelsPerSecond_(40.0f * config.tailGrowthRate) // Base 30px * modifier
+	, speedTimer_(0.0f) //timers for power-ups (speed)
+	, ghostTimer_(0.0f) //timers for power-ups (ghost)
+	, hasTailCutter_(false) // starts without cutter
+	, identityColor_(idColor)
 {
 	ResetTail(position_);
 }
 
 // Reset player to an initial state (used for restart)
-void mPlayer::Reset(Vector2 pStartPos, int pKeyLeft, int pKeyRight, float pStartAngle)
+void mPlayer::Reset(Vector2 pStartPos, BikeType type, float startAngle)
 {
-	// reset basic state
-	position_ = pStartPos;
-	directionAngle_ = pStartAngle;
-	isAlive_ = true;
+	BikeConfig stats = GetBikeStats(type);
 
-	// reset controls
-	keyLeft_ = pKeyLeft;
-	keyRight_ = pKeyRight;
+	// Map Config to mPlayer member variables
+	this->position_ = pStartPos;
+	this->size_ = { stats.size, stats.size };
+	this->speed_ = stats.speed;
+	this->baseSpeed_ = stats.speed;       // Reset base speed too
+	this->rotationSpeed_ = stats.turnSpeed; // Mapped 'turnSpeed' to 'rotationSpeed_'
+	this->color_ = stats.color;
 
-	// reset powerups and base speed
-	speed_ = baseSpeed_;
-	speedTimer_ = 0.0f;
-	ghostTimer_ = 0.0f;
-	hasTailCutter_ = false;
+	// Reset Logic
+	this->type_ = type;
+	this->directionAngle_ = startAngle;   // Set the facing direction
+	this->isAlive_ = true;
 
-	// Reset tail to default length and clear history
-	tailLengthPixels_ = 200.0f;
+	// Reset Tail Growth based on class
+	this->tailLengthPixels_ = 200.0f;
+	this->growthRatePixelsPerSecond_ = 40.0f * stats.tailGrowthRate;
+
+	// Clear Powerups
+	this->speedTimer_ = 0.0f;
+	this->ghostTimer_ = 0.0f;
+	this->hasTailCutter_ = false;
+
+	// Reset Tail (ITailOwner function)
 	ResetTail(position_);
 }
 
@@ -156,13 +165,17 @@ void mPlayer::Update(float deltaTime)
 
 	// Adjust trail sample distance based on speed status
 	//to ensure smooth trail at different speeds
-	if (speed_ < baseSpeed_)
+	if (speed_ <= 110.0f)
 	{
-		trailSampleDistance_ = 1.5f;
+		trailSampleDistance_ = 1.f;
+	}
+	else if (speed_ < 190)
+	{
+		trailSampleDistance_ = 2.0f; 
 	}
 	else
 	{
-		trailSampleDistance_ = 3.0f; // Default
+		trailSampleDistance_ = 3.0f; 
 	}
 
 	// Delegate the heavy lifting to the parent class!
@@ -188,11 +201,17 @@ void mPlayer::Draw()
 	// Draw the trail
 	if (tailSegments_.size() > 1)
 	{
-		Color trailColor = color_;
-		if (ghostTimer_ > 0.0f) trailColor = Fade(color_, 0.2f);
+		// Trail color logic
+		Color baseColor = (ghostTimer_ > 0.0f) ? SKYBLUE : color_;
+		Color glowColor = Fade(baseColor, 0.4f);
+
 		for (size_t i = 0; i < tailSegments_.size() - 1; ++i)
 		{
-			DrawLineV(tailSegments_[i], tailSegments_[i + 1], trailColor);
+			DrawLineEx(tailSegments_[i], tailSegments_[i + 1], 8.0f, glowColor);
+		}
+		for (size_t i = 0; i < tailSegments_.size() - 1; ++i)
+		{
+			DrawLineEx(tailSegments_[i], tailSegments_[i + 1], 2.0f, baseColor);
 		}
 	}
 
@@ -201,6 +220,24 @@ void mPlayer::Draw()
 
 	// initialize head color
 	Color headColor = color_;
+
+	// identidy border
+	float borderThickness = 6.0f;
+	Rectangle borderRec = 
+	{
+		position_.x, position_.y,
+		size_.x + borderThickness, size_.y + borderThickness
+	};
+	Vector2 borderOrigin = { borderRec.width / 2.0f, borderRec.height / 2.0f };
+
+	// Draw the identity border
+	DrawRectanglePro(borderRec, borderOrigin, directionAngle_, Fade(identityColor_, 0.5f));
+
+	// Draw The Class/Status Fill
+	// This changes color based on bike type and powerups
+	Rectangle rec = { position_.x, position_.y, size_.x, size_.y };
+	Vector2 origin = { size_.x / 2.0f, size_.y / 2.0f };
+	DrawRectanglePro(rec, origin, directionAngle_, headColor);
 
 	// Speed Status Logic
 	if (speedTimer_ > 0.0f)
@@ -223,14 +260,8 @@ void mPlayer::Draw()
 	// Fade to sky blue when ghosting
 	if (ghostTimer_ > 0.0f)
 	{
-		headColor = Fade(SKYBLUE, 0.3f);
+		headColor = Fade(SKYBLUE, 0.5f);
 	}
-
-	// Define rectangle for head
-	Rectangle rec = { position_.x, position_.y, size_.x, size_.y };
-	Vector2 origin = { size_.x / 2.0f, size_.y / 2.0f };
-	// Draw head rectangle with rotation
-	DrawRectanglePro(rec, origin, directionAngle_, headColor);
 
 	// Draw tail cutter indicator if active
 	if (hasTailCutter_)
@@ -296,12 +327,4 @@ void mPlayer::Kill()
 {
 	isAlive_ = false;
 	ResetTail(position_);
-}
-
-// Cuts the trail by removing the specified number of oldest segments
-void mPlayer::CutTrail(size_t cutIndex)
-{
-	if (cutIndex >= tailSegments_.size()) return;
-	for (size_t i = 0; i < cutIndex && !tailSegments_.empty(); ++i)
-		tailSegments_.pop_front();
 }
