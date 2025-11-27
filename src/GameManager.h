@@ -46,8 +46,12 @@ private:
 	gameState gameState_;
 
 	//Intro state timer
-	float introTimer_ = 0.0f;;
+	float introTimer_ = 0.0f;
 	float introDuration_ = 6.0f;
+
+	//Menu Timer and alpha
+	float UpdateMenuTimer = 0.0f;
+	float MenuAlpha = 0.0f;
 
 	//number of players selected
 	int selectedPlayers_;
@@ -104,6 +108,7 @@ private:
 	// Private Helper Functions for Drawing
 	void DrawIntro();
 	void DrawMenu();
+	void DrawFadeOverlay();
 	void DrawRunning();
 	void DrawGameOver();
 

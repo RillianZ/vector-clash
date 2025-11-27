@@ -3,9 +3,13 @@
 
 int main()
 {
-	//Change this to a Lower resolution if you have a poor persons screen
+	//comment out this if you wanna change resolution for testing on exam
 	int screenWidth = 2560;
 	int screenHeight = 1440;
+
+	//Uncomment this for smaller screens debug for exam
+	//int screenWidth = 1920;
+	//int screenHeight = 1080;
 	InitWindow(screenWidth, screenHeight, "Vector Clash");
 	SetTargetFPS(60);
 

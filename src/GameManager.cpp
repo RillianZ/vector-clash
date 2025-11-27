@@ -23,8 +23,8 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, hardModeTimer_(0.0f)     // initialize hard mode timer
 	, playerOne_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_LEFT, KEY_RIGHT, 180.0f, RED)
 	, playerTwo_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_A, KEY_D, 0.0f, ORANGE)
-	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_J, KEY_L, 270.0f, GREEN)
-	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_F, KEY_H, 90.0f, YELLOW)
+	, playerThree_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_F, KEY_H, 270.0f, GREEN)
+	, playerFour_({ halfScreenWidth_, halfScreenHeight_ }, GetBikeStats(BikeType::Standard), KEY_J, KEY_L, 90.0f, YELLOW)
 	, enemyOne_({ 0, 0 }, { 16.0f, 16.0f }, 255.0f, 200.0f, BLUE, screenWidth, screenHeight) //sets enemy paramaters
 	, hasBgm_(false) // bgm not loaded at start
 	, audioInitialized_(false) // audio not initialized at start
@@ -272,6 +272,76 @@ bool GameManager::CheckHeadAgainstMap(ITailOwner* subject)
 	return false;
 }
 
+// Handle all collision detection and resolution
+void GameManager::HandleCollisions()
+{
+	std::vector<ITailOwner*> pendingDeaths;
+
+	for (ITailOwner* o : owners_)
+	{
+		if (!o->IsAlive()) continue;
+		// Check if the owner is a player and if they are in ghost mode
+		mPlayer* player = dynamic_cast<mPlayer*>(o);
+		bool isGhost = (player && player->IsPhasing());
+		bool markedForDeath = false;
+
+		// Wall Checks
+		if (CheckHeadAgainstMap(o)) markedForDeath = true;
+
+		// Tail Checks (Updated)
+		TailHitResult hit = GetTailCollisionVictim(o); 
+
+		// Process Tail Hit Result
+		if (hit.victim && !markedForDeath)
+		{
+			if (isGhost) { /* Pass through */ }
+			else if (player && player->HasTailCutter())
+			{
+				// New Cutter Logic
+				player->ConsumeTailCutter();
+
+				// Define clearance buffer to avoid immediate re-collision
+				size_t clearanceBuffer = 12;
+				size_t cutIndex = hit.index + clearanceBuffer;
+
+				// Safety Clamp
+				size_t maxIndex = hit.victim->GetTailSegments().size();
+				if (maxIndex > 0)
+				{
+					// Ensure we don't cut beyond the tail length
+					if (cutIndex >= maxIndex) cutIndex = maxIndex - 1;
+
+					// Perform the cut
+					hit.victim->CutTailAtIndex(cutIndex);
+				}
+
+				// Play sound effect
+				if (audioInitialized_) PlaySound(fxSlice_); 
+			}
+			else
+			{
+				// no powerup = death
+				markedForDeath = true;
+			}
+		}
+
+		if (markedForDeath) pendingDeaths.push_back(o);
+	}
+
+	// Execute Deaths
+	bool someoneDied = false;
+	for (ITailOwner* victim : pendingDeaths)
+	{
+		if (victim->IsAlive())
+		{
+			victim->OwnerKill();
+			if (selectedPlayers_ == 1 && victim != &playerOne_) enemiesDupedCurrent_++;
+			someoneDied = true;
+		}
+	}
+	if (someoneDied && audioInitialized_) PlaySound(fxCrash_);
+}
+
 // Main per-frame update function
 void GameManager::Update(float dt)
 {
@@ -302,6 +372,20 @@ void GameManager::Update(float dt)
 void GameManager::UpdateMenu()
 {
 	bool changed = false;
+	UpdateMenuTimer += GetFrameTime();
+	float fadeDuration = 2.0f;
+
+	// Calculate Alpha (0.0 to 1.0)
+	if (UpdateMenuTimer < fadeDuration)
+	{
+		MenuAlpha = UpdateMenuTimer / fadeDuration;
+	}
+	else
+	{
+		MenuAlpha = 1.0f;
+	}
+
+
 
 	// PLAYER BIKE SELECTION 
 	// Helper Lambda to cycle bikes safely
@@ -328,13 +412,13 @@ void GameManager::UpdateMenu()
 	if (IsKeyPressed(KEY_A)) CycleBike(1, -1);
 	if (IsKeyPressed(KEY_D)) CycleBike(1, 1);
 
-	// Player 3 (J / L)
-	if (IsKeyPressed(KEY_J)) CycleBike(2, -1);
-	if (IsKeyPressed(KEY_L)) CycleBike(2, 1);
+	// Player 3 (F / H)
+	if (IsKeyPressed(KEY_F)) CycleBike(2, -1);
+	if (IsKeyPressed(KEY_H)) CycleBike(2, 1);
 
-	// Player 4 (F / H)
-	if (IsKeyPressed(KEY_F)) CycleBike(3, -1);
-	if (IsKeyPressed(KEY_H)) CycleBike(3, 1);
+	// Player 4 (J / L)
+	if (IsKeyPressed(KEY_J)) CycleBike(3, -1);
+	if (IsKeyPressed(KEY_L)) CycleBike(3, 1);
 
 	// Player Count (Up / Down)
 	if (IsKeyPressed(KEY_UP))
@@ -424,6 +508,8 @@ void GameManager::UpdateGameOver()
 	else if (IsKeyPressed(KEY_ENTER))
 	{
 		gameState_ = gameState::Menu;
+		UpdateMenuTimer = 0.0f;
+		MenuAlpha = 0.0f;
 	}
 
 	// Keep music playing at lower volume
@@ -476,479 +562,6 @@ void GameManager::UpdateRunning(float dt)
 		SetMusicVolume(bgmTracks_[currentTrackIndex_], 1.0f);
 	}
 		
-}
-
-// Draw current game state (call between BeginDrawing/EndDrawing)
-void GameManager::Draw()
-{
-	switch (gameState_)
-	{
-	case gameState::Intro:
-		DrawIntro();
-		break;
-
-	case gameState::Menu:
-		DrawMenu();
-		break;
-
-	case gameState::Running:
-		DrawRunning();
-		break;
-
-	case gameState::GameOver:
-		DrawGameOver();
-		break;
-	}
-}
-
-// Helper Draw Menu
-void GameManager::DrawMenu()
-{
-	// Determine Grid Style based on Difficulty
-	Color gridColor = Fade(DARKGRAY, 0.1f); // Default (Normal/Easy)
-	bool pulse = false;
-
-	if (difficulty_ == Difficulty::Hard)
-	{
-		// Hard mode = static red
-		gridColor = Fade(RED, 0.15f);
-		pulse = false;
-	}
-	else if (difficulty_ == Difficulty::Chaos)
-	{
-		// Chaos mode =  Pulsating Dark red
-		gridColor = MAROON;
-		pulse = true;
-	}
-
-	// Draw the map with the configured style
-	mapGen_.Draw(gridColor, pulse);
-
-	Color dimColor = Fade(BLACK, 0.85f); // Default
-
-	if (difficulty_ == Difficulty::Hard)
-	{
-		dimColor = Fade(MAROON, 0.6f); // Reddish tint
-	}
-	else if (difficulty_ == Difficulty::Chaos)
-	{
-		dimColor = Fade(DARKBLUE, 0.6f); // Blueish tint
-	}
-	else if (difficulty_ == Difficulty::Easy)
-	{
-		dimColor = Fade(GREEN, 0.6f); // greenish tint
-	}
-
-	DrawRectangle(0, 0, screenWidth_, screenHeight_, dimColor);
-
-	// Draw High Scores (Top Corners)
-	std::string scoreLen = "BEST LEN: " + std::to_string((int)bestSoloTailLength_);
-	std::string scoreTime = "BEST TIME: " + std::to_string((int)bestSurvivalTime_) + "s";
-
-	DrawText(scoreLen.c_str(), 20, 20, 20, LIME);
-	DrawText(scoreTime.c_str(), screenWidth_ - MeasureText(scoreTime.c_str(), 20) - 20, 20, 20, SKYBLUE);
-
-	// Draw Music Hint
-	DrawText("Music: 'T'", 20, screenHeight_ - 40, 20, DARKGRAY);
-
-	// Info text positions
-	int infoY = 200;
-
-	const char* diffText = "DIFFICULTY: NORMAL";
-	Color diffColor = GRAY;
-
-	switch (difficulty_)
-	{
-	case Difficulty::Easy:
-		diffText = "DIFFICULTY: EASY";
-		diffColor = GREEN;
-		break;
-	case Difficulty::Normal:
-		diffText = "DIFFICULTY: NORMAL";
-		diffColor = RAYWHITE;
-		break;
-	case Difficulty::Hard:
-		diffText = "DIFFICULTY: HARD";
-		diffColor = ORANGE;
-		break;
-	case Difficulty::Chaos:
-		diffText = "DIFFICULTY: CHAOS";
-		diffColor = PURPLE; 
-		break;
-	}
-
-	DrawText(diffText, (screenWidth_ - MeasureText(diffText, 30)) / 2, 130, 30, diffColor);
-	DrawText("(PRESS TAB)", (screenWidth_ - MeasureText("(PRESS TAB)", 10)) / 2, 160, 10, DARKGRAY);
-
-
-	// Title
-	DrawText("VECTOR CLASH", (screenWidth_ - MeasureText("VECTOR CLASH", 80)) / 2, 50, 80, RAYWHITE);
-
-	// Player count info
-	std::string countText = "PLAYERS: < " + std::to_string(selectedPlayers_) + " >  (UP/DOWN)";
-	int countX = (screenWidth_ - MeasureText(countText.c_str(), 30)) / 2;
-	DrawText(countText.c_str(), countX, infoY, 30, YELLOW);
-
-	// draw selection of players
-	std::string sel = "Players: " + std::to_string(selectedPlayers_);
-	int sfs = 48;
-	int sw = MeasureText(sel.c_str(), sfs);
-	DrawText(sel.c_str(), (screenWidth_ - sw) / 2, 280, sfs, YELLOW);
-
-	// draw selection of map type
-	std::string mapName;
-	switch (selectedMapType_)
-	{
-	case MapType::Clean:mapName = "Map: CLEAN";	break;
-	case MapType::Fixed:mapName = "Map: FIXED";	break;
-	case MapType::Wave:	mapName = "Map: WAVE";	break;
-	case MapType::Donut:mapName = "Map: Donut";	break;
-	case MapType::Grid:	mapName = "Map: GRID";	break;
-	default: mapName = "UNKNOWN"; break;
-	}
-
-	// Map Description text
-	std::string mapText = "MAP: " + mapName + "  (PRESS 'M')";
-	int mapX = (screenWidth_ - MeasureText(mapText.c_str(), 30)) / 2;
-	DrawText(mapText.c_str(), mapX, infoY + 40, 30, LIME);
-
-	// Player Slots Layout Configuration
-	int boxWidth = 300;
-	int boxHeight = 250;
-	int gap = 40;        
-	int startY = 350;    
-
-	// Total Width = (4 boxes) + (3 gaps between them)
-	int totalGroupWidth = (4 * boxWidth) + (3 * gap);
-
-	// Ensures centering
-	int startX = (screenWidth_ - totalGroupWidth) / 2;
-
-	// Helper Arrays to avoid big switch statements
-	Color idColors[4] = { RED, ORANGE, GREEN, YELLOW };
-	const char* keys[4] = { "LEFT / RIGHT", "A / D", "J / L", "F / H" };
-
-	for (int i = 0; i < 4; i++)
-	{
-		// Calculate box position
-		int x = startX + (i * (boxWidth + gap));
-		int y = startY;
-
-		// Determine if this player slot is active
-		bool isActive = (i < selectedPlayers_);
-
-		// Draw The Border Identity
-		// If active, color is solid, else faded
-		Color borderColor = isActive ? idColors[i] : Fade(idColors[i], 0.3f);
-
-		// Draw the outline of the player box
-		DrawRectangleLinesEx({ (float)x, (float)y, (float)boxWidth, (float)boxHeight }, 4.0f, borderColor);
-
-		// Draw the Player Label
-		std::string label = "P" + std::to_string(i + 1);
-		DrawText(label.c_str(), x + 10, y + 10, 20, borderColor);
-
-		// Draw The Content for Active / Inactive States
-		if (isActive)
-		{
-			// Get the Data for this Player's selected bike
-			BikeType type = playerLoadouts_[i];
-			BikeConfig stats = GetBikeStats(type); 
-
-			// Draw Class Name (Centered)
-			std::string className;
-			if (type == BikeType::Standard) className = "STANDARD";
-			else if (type == BikeType::Viper) className = "VIPER";
-			else if (type == BikeType::Bruiser) className = "BRUISER";
-			else if (type == BikeType::Ghost) className = "GHOST";
-
-			// Center the text inside the box
-			int nameW = MeasureText(className.c_str(), 30);
-			DrawText(className.c_str(), x + (boxWidth - nameW) / 2, y + 50, 30, stats.color);
-
-			// Draw The Visual Representation
-			int previewSize = 60;
-
-			// Center the square in the box
-			int px = x + (boxWidth - previewSize) / 2;
-			int py = y + 100;
-
-			// Draw Identity Border
-			DrawRectangle(px - 3, py - 3, previewSize + 6, previewSize + 6, idColors[i]);
-			// Draw Class Fill
-			DrawRectangle(px, py, previewSize, previewSize, stats.color);
-
-			// Draw Controls
-			int keyW = MeasureText(keys[i], 20);
-			DrawText(keys[i], x + (boxWidth - keyW) / 2, y + boxHeight - 40, 20, LIGHTGRAY);
-		}
-		else
-		{
-			// INACTIVE STATE
-			const char* txt = "OFF";
-			int txtW = MeasureText(txt, 40);
-			// Center the "OFF" text
-			DrawText(txt, x + (boxWidth - txtW) / 2, y + 100, 40, DARKGRAY);
-		}
-	}
-
-	// Powerup Legend 
-	int legY = 750;
-	int pSize = 30; 
-	int legGap = 300;
-
-	// Calculate total width to center the legend
-	int legendStartX = (screenWidth_ - (3 * legGap)) / 2;
-
-	DrawText("POWERUPS:", (screenWidth_ - MeasureText("POWERUPS:", 20)) / 2, legY - 50, 20, LIGHTGRAY);
-
-	// Helper Lambda to draw each legend item
-	auto DrawLegendItem = [&](int x, Color c, const char* text) {
-		DrawRectangle(x - (pSize / 2), legY, pSize, pSize, c);
-		DrawRectangleLines(x - (pSize / 2), legY, pSize, pSize, RAYWHITE);
-		DrawText(text, x + 25, legY + 5, 20, RAYWHITE);
-		};
-
-	// Speed (Green)
-	DrawLegendItem(legendStartX, GREEN, "Speed Boost");
-
-	// Slow (Lime)
-	DrawLegendItem(legendStartX + legGap, LIME, "Slow Down");
-
-	// Ghost (Blue)
-	DrawLegendItem(legendStartX + (legGap * 2), SKYBLUE, "Ghost Mode");
-
-	// Cutter (Gold)
-	DrawLegendItem(legendStartX + (legGap * 3), GOLD, "Tail Cutter");
-
-
-	// Bottom Instructions (Press Start)
-	const char* instr = "PRESS [ENTER]/[SPACE] TO START";
-	// Pulse effect
-	Color startColor = (int)(GetTime() * 2) % 2 == 0 ? RAYWHITE : GRAY;
-	DrawText(instr, (screenWidth_ - MeasureText(instr, 30)) / 2, screenHeight_ - 100, 30, startColor);
-}
-
-// Helper Draw Running Game
-void GameManager::DrawRunning()
-{
-	// Determine Grid Style based on Difficulty
-	Color gridColor = Fade(DARKGRAY, 0.1f); // Default (Normal/Easy)
-	bool pulse = false;
-
-	if (difficulty_ == Difficulty::Hard)
-	{
-		// Hard mode = static red
-		gridColor = Fade(RED, 0.15f);
-		pulse = false;
-	}
-	else if (difficulty_ == Difficulty::Chaos)
-	{
-		// Chaos mode = Pulsating Maroon
-		gridColor =MAROON;
-		pulse = true;
-	}
-
-	// Draw the map with the configured style
-	mapGen_.Draw(gridColor, pulse);
-
-	// Draw power-ups
-	for (auto& p : powerups_) p.Draw();
-
-	// Draw entities (Players + Enemies)
-	for (ITailOwner* o : owners_) o->OwnerDraw();
-
-	// HUD / Debug Overlay
-	// Show duped count in HUD for Solo
-	if (selectedPlayers_ == 1)
-	{
-		std::string duped = "Duped: " + std::to_string(enemiesDupedCurrent_);
-		DrawText(duped.c_str(), screenWidth_ - 150, 10, 30, ORANGE);
-
-		std::string dbg = "TailPts: " + std::to_string(playerOne_.GetTailSegments().size());
-		DrawText(dbg.c_str(), 10, 10, 30, WHITE);
-
-		std::string pupTimer = "PowerUp in: " + std::to_string((int)powerupSpawnTimer_);
-		DrawText(pupTimer.c_str(), 10, 80, 20, YELLOW);
-
-		std::string activeCount = "Active P-Ups: " + std::to_string(powerups_.size());
-		DrawText(activeCount.c_str(), 10, 100, 20, YELLOW);
-
-		if (difficulty_ == Difficulty::Hard || difficulty_ == Difficulty::Chaos)
-		{
-			std::string label = "Reinforcements: ";
-			Color textColor = RED;
-
-			if (difficulty_ == Difficulty::Chaos)
-			{
-				label = "CHAOS SPAWN: ";
-				textColor = PURPLE;
-			}
-
-			std::string spawnT = label + std::to_string((int)hardModeTimer_);
-
-			// Center the text roughly
-			DrawText(spawnT.c_str(), screenWidth_ / 2 - 220, 10, 30, textColor);
-		}
-	}
-}
-
-// Helper Draw GameOver
-void GameManager::DrawGameOver()
-{
-	// draw messages for solo
-	if (selectedPlayers_ == 1)
-	{
-		//Display "Game Over" message
-		float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
-		std::string msg = "Solo run finished";
-		int fontSize = 40;
-		int textWidth = MeasureText(msg.c_str(), fontSize);
-		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 100, fontSize, RAYWHITE);
-
-		//Display length score
-		char buf[128];
-		snprintf(buf, sizeof(buf), "Length: %.0f px (Best: %.0f)", finalLen, bestSoloTailLength_);
-		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 50, 30, BLUE);
-
-		//Display time score
-		snprintf(buf, sizeof(buf), "Time Alive: %.2fs (Best: %.2fs)", matchTimer_, bestSurvivalTime_);
-		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 10, 30, RAYWHITE);
-
-		//Display duped score
-		snprintf(buf, sizeof(buf), "Enemies Duped: %d (Best: %d)", enemiesDupedCurrent_, enemiesDupedBest_);
-		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 + 30, 30, ORANGE);
-
-		// Hint to restart or menu
-		std::string hint = "Space = Retry, Enter = Menu";
-		int hintSize = 20;
-		int hintW = MeasureText(hint.c_str(), hintSize);
-		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 60, hintSize, LIGHTGRAY);
-	}
-	else // draw messages for Multiplayer
-	{
-		std::string msg;
-		if (winner_ == 1) msg = "PLAYER 1 WINS!";
-		else if (winner_ == 2) msg = "PLAYER 2 WINS!";
-		else if (winner_ == 3) msg = "PLAYER 3 WINS!";
-		else if (winner_ == 4) msg = "PLAYER 4 WINS!";
-		else msg = "DRAW GAME!"; // Tie handling
-
-		int fontSize = 50;
-		int textWidth = MeasureText(msg.c_str(), fontSize);
-		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 100, fontSize, GOLD);
-
-		// Draw Scoreboard
-		int scoreY = screenHeight_ / 2 + 100;
-		int scoreGap = 200;
-		int totalScoreW = selectedPlayers_ * scoreGap;
-		int scoreX = (screenWidth_ - totalScoreW) / 2;
-
-		DrawText("SCOREBOARD", (screenWidth_ - MeasureText("SCOREBOARD", 30)) / 2, scoreY - 40, 30, LIGHTGRAY);
-
-		for (int i = 0; i < selectedPlayers_; i++)
-		{
-			Color pColor = WHITE;
-			if (i == 0) pColor = RED;
-			else if (i == 1) pColor = ORANGE;
-			else if (i == 2) pColor = GREEN;
-			else if (i == 3) pColor = YELLOW;
-
-			std::string s = "P" + std::to_string(i + 1) + ": " + std::to_string(playerWins_[i]);
-
-			//Centering math
-			int textWidth = MeasureText(s.c_str(), 30);
-
-			//Find the left edge of this specific column
-			int columnLeft = scoreX + (i * scoreGap);
-
-			// Calculate the centered X position within this column
-			int centeredX = columnLeft + (scoreGap - textWidth) / 2;
-
-			DrawText(s.c_str(), centeredX, scoreY, 30, pColor);
-		}
-
-		std::string hint = "Press Space to restart, Enter to return to Menu";
-		int hintSize = 28;
-		int hintW = MeasureText(hint.c_str(), hintSize);
-		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, scoreY + 80, hintSize, LIGHTGRAY);
-	}
-}
-
-// save high scores to file
-void GameManager::SaveHighScores()
-{
-	std::ofstream file(saveFileName_);
-	if (file.is_open())
-	{
-		// Write stats line by line
-		file << bestSurvivalTime_ << "\n";
-		file << bestSoloTailLength_ << "\n";
-		file << enemiesDupedBest_ << "\n";
-		file.close();
-	}
-}
-
-// Load high scores from file
-void GameManager::LoadHighScores()
-{
-	std::ifstream file(saveFileName_);
-	if (file.is_open())
-	{
-		// Read stats in the same order
-		file >> bestSurvivalTime_;
-		file >> bestSoloTailLength_;
-		file >> enemiesDupedBest_;
-		file.close();
-	}
-}
-
-// Update intro screen
-void GameManager::UpdateIntro() {
-	introTimer_ += GetFrameTime();
-	// Play intro sound once at start
-	if (introTimer_ >= 1.8f && !introSoundPlayed_ && audioInitialized_) {
-		PlaySound(fxIntroSound_);
-		introSoundPlayed_ = true;
-	}
-	if (introTimer_ > introDuration_) {
-		gameState_ = gameState::Menu;
-	}
-}
-
-// Draw intro screen
-void GameManager::DrawIntro() 
-{
-	float alpha = 0.0f;
-	float delayTime = 2.0f;
-	float fadeTime = 2.0f;
-
-	//delay before fade in
-	if (introTimer_ < delayTime)
-	{
-		alpha = 0.0f;
-	}
-
-	// Fade in
-	if (introTimer_ <= (delayTime + fadeTime))
-	{
-		alpha = (introTimer_ - delayTime)/ fadeTime ;
-	}
-
-	// Fade out
-	else
-	{
-		alpha = (introDuration_ - introTimer_) / fadeTime;
-	}
-
-	// Clamp alpha between 0 and 1
-	if (alpha < 0.0f) alpha = 0.0f;
-	if (alpha > 1.0f) alpha = 1.0f;
-
-
-	// Draw fading title
-	Color fadeColor = Fade(LIME, alpha); 
-	DrawText("VECTOR CLASH", GetScreenWidth() / 2 - 150, GetScreenHeight() / 2, 40, fadeColor);
 }
 
 // Update power-up system
@@ -1142,76 +755,514 @@ void GameManager::UpdateSoloAI(float dt)
 	}
 }
 
-// Handle all collision detection and resolution
-void GameManager::HandleCollisions()
-{
-	std::vector<ITailOwner*> pendingDeaths;
-
-	for (ITailOwner* o : owners_)
-	{
-		if (!o->IsAlive()) continue;
-		// Check if the owner is a player and if they are in ghost mode
-		mPlayer* player = dynamic_cast<mPlayer*>(o);
-		bool isGhost = (player && player->IsPhasing());
-		bool markedForDeath = false;
-
-		// Wall Checks
-		if (CheckHeadAgainstMap(o)) markedForDeath = true;
-
-		// Tail Checks (Updated)
-		TailHitResult hit = GetTailCollisionVictim(o); 
-
-		// Process Tail Hit Result
-		if (hit.victim && !markedForDeath)
-		{
-			if (isGhost) { /* Pass through */ }
-			else if (player && player->HasTailCutter())
-			{
-				// New Cutter Logic
-				player->ConsumeTailCutter();
-
-				// Define clearance buffer to avoid immediate re-collision
-				size_t clearanceBuffer = 12;
-				size_t cutIndex = hit.index + clearanceBuffer;
-
-				// Safety Clamp
-				size_t maxIndex = hit.victim->GetTailSegments().size();
-				if (maxIndex > 0)
-				{
-					// Ensure we don't cut beyond the tail length
-					if (cutIndex >= maxIndex) cutIndex = maxIndex - 1;
-
-					// Perform the cut
-					hit.victim->CutTailAtIndex(cutIndex);
-				}
-
-				// Play sound effect
-				if (audioInitialized_) PlaySound(fxSlice_); 
-			}
-			else
-			{
-				// no powerup = death
-				markedForDeath = true;
-			}
-		}
-
-		if (markedForDeath) pendingDeaths.push_back(o);
+// Update intro screen
+void GameManager::UpdateIntro() {
+	introTimer_ += GetFrameTime();
+	// Play intro sound once at start
+	if (introTimer_ >= 2.0f && !introSoundPlayed_ && audioInitialized_) {
+		PlaySound(fxIntroSound_);
+		introSoundPlayed_ = true;
 	}
-
-	// Execute Deaths
-	bool someoneDied = false;
-	for (ITailOwner* victim : pendingDeaths)
-	{
-		if (victim->IsAlive())
-		{
-			victim->OwnerKill();
-			if (selectedPlayers_ == 1 && victim != &playerOne_) enemiesDupedCurrent_++;
-			someoneDied = true;
-		}
+	if (introTimer_ > introDuration_) {
+		gameState_ = gameState::Menu;
+		UpdateMenuTimer = 0.0f;
+		MenuAlpha = 0.0f;
 	}
-	if (someoneDied && audioInitialized_) PlaySound(fxCrash_);
 }
 
+//MAJOR DRAWING BLOCK
+// Draw current game state (call between BeginDrawing/EndDrawing)
+void GameManager::Draw()
+{
+	switch (gameState_)
+	{
+	case gameState::Intro:
+		DrawIntro();
+		break;
+
+	case gameState::Menu:
+		DrawMenu();
+		break;
+
+	case gameState::Running:
+		DrawRunning();
+		break;
+
+	case gameState::GameOver:
+		DrawGameOver();
+		break;
+	}
+}
+
+// Helper Draw Menu
+void GameManager::DrawMenu()
+{
+	// Determine Grid Style based on Difficulty
+	Color gridColor = Fade(DARKGRAY, 0.1f); // Default (Normal/Easy)
+	bool pulse = false;
+
+	if (difficulty_ == Difficulty::Hard)
+	{
+		// Hard mode = static red
+		gridColor = Fade(RED, 0.15f);
+		pulse = false;
+	}
+	else if (difficulty_ == Difficulty::Chaos)
+	{
+		// Chaos mode =  Pulsating Dark red
+		gridColor = MAROON;
+		pulse = true;
+	}
+
+	// Draw the map with the configured style
+	mapGen_.Draw(gridColor, pulse);
+
+	Color dimColor = Fade(BLACK, 0.85f); // Default
+
+	if (difficulty_ == Difficulty::Hard)
+	{
+		dimColor = Fade(MAROON, 0.6f); // Reddish tint
+	}
+	else if (difficulty_ == Difficulty::Chaos)
+	{
+		dimColor = Fade(DARKBLUE, 0.6f); // Blueish tint
+	}
+	else if (difficulty_ == Difficulty::Easy)
+	{
+		dimColor = Fade(GREEN, 0.6f); // greenish tint
+	}
+
+	DrawRectangle(0, 0, screenWidth_, screenHeight_, dimColor);
+
+	// Draw High Scores (Top Corners)
+	std::string scoreLen = "BEST LEN: " + std::to_string((int)bestSoloTailLength_);
+	std::string scoreTime = "BEST TIME: " + std::to_string((int)bestSurvivalTime_) + "s";
+
+	DrawText(scoreLen.c_str(), 20, 20, 20, LIME);
+	DrawText(scoreTime.c_str(), screenWidth_ - MeasureText(scoreTime.c_str(), 20) - 20, 20, 20, SKYBLUE);
+
+	// Draw Music Hint
+	DrawText("Change Background Music: 'T'", 100, screenHeight_ - 100, 50, MAROON);
+
+	// Info text positions
+	int infoY = 200;
+
+	const char* diffText = "DIFFICULTY: NORMAL";
+	Color diffColor = GRAY;
+
+	switch (difficulty_)
+	{
+	case Difficulty::Easy:
+		diffText = "DIFFICULTY: EASY";
+		diffColor = GREEN;
+		break;
+	case Difficulty::Normal:
+		diffText = "DIFFICULTY: NORMAL";
+		diffColor = RAYWHITE;
+		break;
+	case Difficulty::Hard:
+		diffText = "DIFFICULTY: HARD";
+		diffColor = ORANGE;
+		break;
+	case Difficulty::Chaos:
+		diffText = "DIFFICULTY: CHAOS";
+		diffColor = PURPLE; 
+		break;
+	}
+
+	DrawText(diffText, (screenWidth_ - MeasureText(diffText, 30)) / 2, 130, 30, diffColor);
+	DrawText("(PRESS TAB)", (screenWidth_ - MeasureText("(PRESS TAB)", 30)) / 2, 160, 30, DARKGRAY);
+
+
+	// Title
+	DrawText("VECTOR CLASH", (screenWidth_ - MeasureText("VECTOR CLASH", 80)) / 2, 50, 80, MAROON);
+
+	// Player count info
+	std::string countText = "PLAYERS: < " + std::to_string(selectedPlayers_) + " >  (UP/DOWN)";
+	int countX = (screenWidth_ - MeasureText(countText.c_str(), 30)) / 2;
+	DrawText(countText.c_str(), countX, infoY, 30, YELLOW);
+
+	// draw selection of players
+	std::string sel = "Players: " + std::to_string(selectedPlayers_);
+	int sfs = 48;
+	int sw = MeasureText(sel.c_str(), sfs);
+	DrawText(sel.c_str(), (screenWidth_ - sw) / 2, 280, sfs, YELLOW);
+
+	// draw selection of map type
+	std::string mapName;
+	switch (selectedMapType_)
+	{
+	case MapType::Clean:mapName = "Map: CLEAN";	break;
+	case MapType::Fixed:mapName = "Map: FIXED";	break;
+	case MapType::Wave:	mapName = "Map: WAVE";	break;
+	case MapType::Donut:mapName = "Map: Donut";	break;
+	case MapType::Grid:	mapName = "Map: GRID";	break;
+	default: mapName = "UNKNOWN"; break;
+	}
+
+	// Map Description text
+	std::string mapText = "MAP: " + mapName + "  (PRESS 'M')";
+	int mapX = (screenWidth_ - MeasureText(mapText.c_str(), 30)) / 2;
+	DrawText(mapText.c_str(), mapX, infoY + 40, 30, LIME);
+
+	// Player Slots Layout Configuration
+	int boxWidth = 300;
+	int boxHeight = 250;
+	int gap = 40;        
+	int startY = 350;    
+
+	// Total Width = (4 boxes) + (3 gaps between them)
+	int totalGroupWidth = (4 * boxWidth) + (3 * gap);
+
+	// Ensures centering
+	int startX = (screenWidth_ - totalGroupWidth) / 2;
+
+	// Helper Arrays to avoid big switch statements
+	Color idColors[4] = { RED, ORANGE, GREEN, YELLOW };
+	const char* keys[4] = { "LEFT / RIGHT", "A / D", "F / H", "J / L" };
+
+	for (int i = 0; i < 4; i++)
+	{
+		// Calculate box position
+		int x = startX + (i * (boxWidth + gap));
+		int y = startY;
+
+		// Determine if this player slot is active
+		bool isActive = (i < selectedPlayers_);
+
+		// Draw The Border Identity
+		// If active, color is solid, else faded
+		Color borderColor = isActive ? idColors[i] : Fade(idColors[i], 0.3f);
+
+		// Draw the outline of the player box
+		DrawRectangleLinesEx({ (float)x, (float)y, (float)boxWidth, (float)boxHeight }, 4.0f, borderColor);
+
+		// Draw the Player Label
+		std::string label = "P" + std::to_string(i + 1);
+		DrawText(label.c_str(), x + 10, y + 10, 20, borderColor);
+
+		// Draw The Content for Active / Inactive States
+		if (isActive)
+		{
+			// Get the Data for this Player's selected bike
+			BikeType type = playerLoadouts_[i];
+			BikeConfig stats = GetBikeStats(type); 
+
+			// Draw Class Name (Centered)
+			std::string className;
+			if (type == BikeType::Standard) className = "STANDARD";
+			else if (type == BikeType::Viper) className = "VIPER";
+			else if (type == BikeType::Bruiser) className = "BRUISER";
+			else if (type == BikeType::Ghost) className = "GHOST";
+
+			// Center the text inside the box
+			int nameW = MeasureText(className.c_str(), 30);
+			DrawText(className.c_str(), x + (boxWidth - nameW) / 2, y + 50, 30, stats.color);
+
+			// Draw The Visual Representation
+			int previewSize = 60;
+
+			// Center the square in the box
+			int px = x + (boxWidth - previewSize) / 2;
+			int py = y + 100;
+
+			// Draw Identity Border
+			DrawRectangle(px - 3, py - 3, previewSize + 6, previewSize + 6, idColors[i]);
+			// Draw Class Fill
+			DrawRectangle(px, py, previewSize, previewSize, stats.color);
+
+			// Draw Controls
+			int keyW = MeasureText(keys[i], 20);
+			DrawText(keys[i], x + (boxWidth - keyW) / 2, y + boxHeight - 40, 20, LIGHTGRAY);
+		}
+		else
+		{
+			// INACTIVE STATE
+			const char* txt = "OFF";
+			int txtW = MeasureText(txt, 40);
+			// Center the "OFF" text
+			DrawText(txt, x + (boxWidth - txtW) / 2, y + 100, 40, DARKGRAY);
+		}
+	}
+
+	// Powerup Legend 
+	int legY = 750;
+	int pSize = 30; 
+	int legGap = 300;
+
+	// Calculate total width to center the legend
+	int legendStartX = (screenWidth_ - (3 * legGap)) / 2;
+
+	DrawText("POWERUPS:", (screenWidth_ - MeasureText("POWERUPS:", 20)) / 2, legY - 50, 20, LIGHTGRAY);
+
+	// Helper Lambda to draw each legend item
+	auto DrawLegendItem = [&](int x, Color c, const char* text) {
+		DrawRectangle(x - (pSize / 2), legY, pSize, pSize, c);
+		DrawRectangleLines(x - (pSize / 2), legY, pSize, pSize, RAYWHITE);
+		DrawText(text, x + 25, legY + 5, 20, RAYWHITE);
+		};
+
+	// Speed (Green)
+	DrawLegendItem(legendStartX, GREEN, "Speed Boost");
+
+	// Slow (Lime)
+	DrawLegendItem(legendStartX + legGap, LIME, "Slow Down");
+
+	// Ghost (Blue)
+	DrawLegendItem(legendStartX + (legGap * 2), SKYBLUE, "Ghost Mode");
+
+	// Cutter (Gold)
+	DrawLegendItem(legendStartX + (legGap * 3), GOLD, "Tail Cutter");
+
+
+	// Bottom Instructions (Press Start)
+	const char* instr = "PRESS [ENTER]/[SPACE] TO START";
+	// Pulse effect
+	Color startColor = (int)(GetTime() * 2) % 2 == 0 ? RAYWHITE : GRAY;
+	DrawText(instr, (screenWidth_ - MeasureText(instr, 30)) / 2, screenHeight_ - 400, 30, startColor);
+
+	DrawFadeOverlay();
+
+}
+
+//helper to fadein menu
+void GameManager::DrawFadeOverlay()
+{
+	// If MenuAlpha is 1.0, the fade is complete, so we don't draw the rectangle
+	if (MenuAlpha < 1.0f)
+	{
+		// Inverse the alpha: Starts at 1.0 (Opaque Black), ends at 0.0 (Transparent)
+		float overlayAlpha = 1.0f - MenuAlpha;
+
+		DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, overlayAlpha));
+	}
+}
+
+// Helper Draw Running Game
+void GameManager::DrawRunning()
+{
+	// Determine Grid Style based on Difficulty
+	Color gridColor = Fade(DARKGRAY, 0.1f); // Default (Normal/Easy)
+	bool pulse = false;
+
+	if (difficulty_ == Difficulty::Hard)
+	{
+		// Hard mode = static red
+		gridColor = Fade(RED, 0.15f);
+		pulse = false;
+	}
+	else if (difficulty_ == Difficulty::Chaos)
+	{
+		// Chaos mode = Pulsating Maroon
+		gridColor =MAROON;
+		pulse = true;
+	}
+
+	// Draw the map with the configured style
+	mapGen_.Draw(gridColor, pulse);
+
+	// Draw power-ups
+	for (auto& p : powerups_) p.Draw();
+
+	// Draw entities (Players + Enemies)
+	for (ITailOwner* o : owners_) o->OwnerDraw();
+
+	// HUD / Debug Overlay
+	// Show duped count in HUD for Solo
+	if (selectedPlayers_ == 1)
+	{
+		std::string duped = "Duped: " + std::to_string(enemiesDupedCurrent_);
+		DrawText(duped.c_str(), screenWidth_ - 150, 10, 30, ORANGE);
+
+		std::string dbg = "TailPts: " + std::to_string(playerOne_.GetTailSegments().size());
+		DrawText(dbg.c_str(), 10, 10, 30, WHITE);
+
+		std::string pupTimer = "PowerUp in: " + std::to_string((int)powerupSpawnTimer_);
+		DrawText(pupTimer.c_str(), 10, 80, 20, YELLOW);
+
+		std::string activeCount = "Active P-Ups: " + std::to_string(powerups_.size());
+		DrawText(activeCount.c_str(), 10, 100, 20, YELLOW);
+
+		if (difficulty_ == Difficulty::Hard || difficulty_ == Difficulty::Chaos)
+		{
+			std::string label = "Reinforcements: ";
+			Color textColor = RED;
+
+			if (difficulty_ == Difficulty::Chaos)
+			{
+				label = "CHAOS SPAWN: ";
+				textColor = PURPLE;
+			}
+
+			std::string spawnT = label + std::to_string((int)hardModeTimer_);
+
+			// Center the text roughly
+			DrawText(spawnT.c_str(), screenWidth_ / 2 - 220, 10, 30, textColor);
+		}
+	}
+}
+
+// Helper Draw GameOver
+void GameManager::DrawGameOver()
+{
+	// draw messages for solo
+	if (selectedPlayers_ == 1)
+	{
+		//Display "Game Over" message
+		float finalLen = owners_.empty() ? 0.0f : owners_[0]->GetTailPixelLength();
+		std::string msg = "Solo run finished";
+		int fontSize = 40;
+		int textWidth = MeasureText(msg.c_str(), fontSize);
+		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 100, fontSize, RED);
+
+		//Display length score
+		char buf[128];
+		snprintf(buf, sizeof(buf), "Length: %.0f px (Best: %.0f)", finalLen, bestSoloTailLength_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 50, 30, BLUE);
+
+		//Display time score
+		snprintf(buf, sizeof(buf), "Time Alive: %.2fs (Best: %.2fs)", matchTimer_, bestSurvivalTime_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 - 10, 30, RAYWHITE);
+
+		//Display duped score
+		snprintf(buf, sizeof(buf), "Enemies Duped: %d (Best: %d)", enemiesDupedCurrent_, enemiesDupedBest_);
+		DrawText(buf, (screenWidth_ - MeasureText(buf, 30)) / 2, screenHeight_ / 2 + 30, 30, ORANGE);
+
+		// Hint to restart or menu
+		std::string hint = "Space = Retry, Enter = Menu";
+		int hintSize = 20;
+		int hintW = MeasureText(hint.c_str(), hintSize);
+		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, screenHeight_ / 2 + 60, hintSize, LIGHTGRAY);
+	}
+	else // draw messages for Multiplayer
+	{
+		std::string msg;
+		if (winner_ == 1) msg = "PLAYER 1 WINS!";
+		else if (winner_ == 2) msg = "PLAYER 2 WINS!";
+		else if (winner_ == 3) msg = "PLAYER 3 WINS!";
+		else if (winner_ == 4) msg = "PLAYER 4 WINS!";
+		else msg = "DRAW GAME!"; // Tie handling
+
+		int fontSize = 50;
+		int textWidth = MeasureText(msg.c_str(), fontSize);
+		DrawText(msg.c_str(), (screenWidth_ - textWidth) / 2, screenHeight_ / 2 - 100, fontSize, GOLD);
+
+		// Draw Scoreboard
+		int scoreY = screenHeight_ / 2 + 100;
+		int scoreGap = 200;
+		int totalScoreW = selectedPlayers_ * scoreGap;
+		int scoreX = (screenWidth_ - totalScoreW) / 2;
+
+		DrawText("SCOREBOARD", (screenWidth_ - MeasureText("SCOREBOARD", 30)) / 2, scoreY - 40, 30, LIGHTGRAY);
+
+		for (int i = 0; i < selectedPlayers_; i++)
+		{
+			Color pColor = WHITE;
+			if (i == 0) pColor = RED;
+			else if (i == 1) pColor = ORANGE;
+			else if (i == 2) pColor = GREEN;
+			else if (i == 3) pColor = YELLOW;
+
+			std::string s = "P" + std::to_string(i + 1) + ": " + std::to_string(playerWins_[i]);
+
+			//Centering math
+			int textWidth = MeasureText(s.c_str(), 30);
+
+			//Find the left edge of this specific column
+			int columnLeft = scoreX + (i * scoreGap);
+
+			// Calculate the centered X position within this column
+			int centeredX = columnLeft + (scoreGap - textWidth) / 2;
+
+			DrawText(s.c_str(), centeredX, scoreY, 30, pColor);
+		}
+
+		std::string hint = "Press Space to restart, Enter to return to Menu";
+		int hintSize = 28;
+		int hintW = MeasureText(hint.c_str(), hintSize);
+		DrawText(hint.c_str(), (screenWidth_ - hintW) / 2, scoreY + 80, hintSize, LIGHTGRAY);
+	}
+}
+
+// Draw intro screen
+void GameManager::DrawIntro() 
+{
+	float alpha = 0.0f;
+	float delayTime = 2.0f;
+	float fadeTime = 2.0f;
+
+	//delay before fade in
+	if (introTimer_ < delayTime)
+	{
+		alpha = 0.0f;
+	}
+
+	// Fade in
+	if (introTimer_ <= (delayTime + fadeTime))
+	{
+		alpha = (introTimer_ - delayTime)/ fadeTime ;
+	}
+
+	// Fade out
+	else
+	{
+		alpha = (introDuration_ - introTimer_) / fadeTime;
+	}
+
+	// Clamp alpha between 0 and 1
+	if (alpha < 0.0f) alpha = 0.0f;
+	if (alpha > 1.0f) alpha = 1.0f;
+
+
+	// Draw fading title
+	Color fadeColor = Fade(RED, alpha);
+	Color fadeColorAuth = Fade(RED, alpha);
+
+	// Define Text and Sizes
+	const char* title = "VECTOR CLASH";
+	const char* author = "By Rillian";
+	int titleSize = 120;
+	int authorSize = 60;
+
+	// Calculate Centered X Positions
+	int titleX = (GetScreenWidth() - MeasureText(title, titleSize)) / 2;
+	int authorX = (GetScreenWidth() - MeasureText(author, authorSize)) / 2;
+
+	// Draw Text
+	DrawText(title, titleX, GetScreenHeight() / 2 - 80, titleSize, fadeColor);
+	DrawText(author, authorX, GetScreenHeight() / 2 + 20, authorSize, fadeColorAuth);
+}
+
+//SCORING SYSTEM
+// save high scores to file
+void GameManager::SaveHighScores()
+{
+	std::ofstream file(saveFileName_);
+	if (file.is_open())
+	{
+		// Write stats line by line
+		file << bestSurvivalTime_ << "\n";
+		file << bestSoloTailLength_ << "\n";
+		file << enemiesDupedBest_ << "\n";
+		file.close();
+	}
+}
+
+// Load high scores from file
+void GameManager::LoadHighScores()
+{
+	std::ifstream file(saveFileName_);
+	if (file.is_open())
+	{
+		// Read stats in the same order
+		file >> bestSurvivalTime_;
+		file >> bestSoloTailLength_;
+		file >> enemiesDupedBest_;
+		file.close();
+	}
+}
+
+//ENDGAME BLOCK
 // Check for game over conditions
 void GameManager::CheckGameOver()
 {
