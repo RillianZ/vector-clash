@@ -13,9 +13,9 @@
 struct TailHitResult
 {
 	//who got hit?
-	ITailOwner* victim; 
+	ITailOwner* victim;
 	//at what point of tail?
-	size_t index;      
+	size_t index;
 };
 
 class GameManager
@@ -70,26 +70,26 @@ private:
 
 	// Solo mode tracking
 	float bestSoloTailLength_;
-	float matchTimer_;       
-	float bestSurvivalTime_; 
+	float matchTimer_;
+	float bestSurvivalTime_;
 
 	//  Solo Mode Stats
 	int enemiesDupedCurrent_;
 	int enemiesDupedBest_;
 
+	// Global spawn delay timer
+	float startDelayTimer_;
 
 	// Difficulty and hard mode timer
 	enum class Difficulty { Normal, Easy, Hard, Chaos, Count };
 	Difficulty difficulty_;
 	float hardModeTimer_;
 
-	
-
 	// Spawn timer in seconds
-	const float hardModeInterval_ = 5.0f; 
+	const float hardModeInterval_ = 5.0f;
 
 	// Dynamic enemies container (used to avoid memory leaks)
-	std::vector<Enemy*> extraEnemies_; 
+	std::vector<Enemy*> extraEnemies_;
 
 	// PowerUps
 	std::vector<PowerUp> powerups_;
@@ -105,6 +105,7 @@ private:
 	void UpdateRunning(float dt);
 	void UpdateGameOver();
 
+
 	// Private Helper Functions for Drawing
 	void DrawIntro();
 	void DrawMenu();
@@ -115,20 +116,20 @@ private:
 	// Private Helper Functions for UpdateRunning decomposition
 	// Helper for updates
 	void UpdatePowerups(float dt);
-	
+
 	// Handles Base Enemy + Reinforcements (Chaos Logic)
 	void UpdateSoloAI(float dt);
 
 	// Handles Deaths and Cuts
-	void HandleCollisions(); 
+	void HandleCollisions();
 
 	// Handles Win conditions
-	void CheckGameOver();        
+	void CheckGameOver();
 
 	// Persistence Helpers
 	void LoadHighScores();
 	void SaveHighScores();
-	
+
 	// Players constructed here
 	mPlayer playerOne_;
 	mPlayer playerTwo_;
@@ -183,5 +184,4 @@ private:
 	bool introSoundPlayed_ = false;
 
 	bool audioInitialized_ = false;
-
 };

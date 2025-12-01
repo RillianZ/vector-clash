@@ -33,5 +33,4 @@ public:
 	static Vector2D CircularMotion(Vector2D inCenter, float inRadius, float inAngle);
 	// Helper to normalize angle difference to -180 to 180 range
 	static float NormalizeAngleDiff(float diff);
-
 };

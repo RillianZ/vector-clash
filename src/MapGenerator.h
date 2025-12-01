@@ -12,7 +12,7 @@ enum class MapType
 	Donut,		// Circular (Stage 4)
 	Grid,	// Vertical obstacles (Stage 5)
 	Chaos, // Random obstacles every restart (Special Mode)
-	Count		//helper to count number of map types 
+	Count		//helper to count number of map types
 };
 
 // MapGenerator class handles map creation and obstacle management
@@ -44,5 +44,4 @@ private:
 	void GenerateWaveMap(int screenW, int screenH);
 	void GenerateDonutMap(int screenW, int screenH);
 	void GenerateGridMap(int screenW, int screenH);
-	
 };

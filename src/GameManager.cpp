@@ -32,6 +32,7 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, powerupSpawnTimer_(0.0f) // initialize powerup spawn timer
 	, difficulty_(Difficulty::Normal) // default to normal difficulty
 	, currentTrackIndex_(0) // initialize current track index
+	, startDelayTimer_(0.0f)
 {
 	// initialize player loadouts to Standard
 	for (int i = 0; i < 4; i++)
@@ -94,7 +95,7 @@ void GameManager::ResetPlayers(int playerCount)
 	extraEnemies_.clear();
 
 	// Reset constants
-	const float sep = 300.0f; 
+	const float sep = 300.0f;
 
 	spawnInvulnerableTimer_ = spawnInvulnerableSeconds_;
 	winner_ = 0;
@@ -155,14 +156,14 @@ void GameManager::ResetPlayers(int playerCount)
 			// Create the new enemy
 			Enemy* newEnemy = new Enemy(spawnPos, { 16.0f, 16.0f }, speed, 200.0f, c, screenWidth_, screenHeight_);
 
-			// Configure refs
+			// Configure refs and speed for each enemy
 			newEnemy->SetPlayerReference(&playerOne_);
 			newEnemy->SetObstaclesReference(&mapGen_.GetObstacles());
-			newEnemy->SetSpeed(speed); 
+			newEnemy->SetSpeed(speed);
 
 			// Store in lists
-			extraEnemies_.push_back(newEnemy); 
-			owners_.push_back(newEnemy);       
+			extraEnemies_.push_back(newEnemy);
+			owners_.push_back(newEnemy);
 		}
 	}
 
@@ -173,6 +174,9 @@ void GameManager::ResetPlayers(int playerCount)
 	// Reset powerups
 	powerups_.clear();
 	powerupSpawnTimer_ = (float)GetRandomValue(2, 5);
+
+	// Reset start delay
+	startDelayTimer_ = 3.0f;
 }
 
 // Spawns a power-up at a random valid location
@@ -289,7 +293,7 @@ void GameManager::HandleCollisions()
 		if (CheckHeadAgainstMap(o)) markedForDeath = true;
 
 		// Tail Checks (Updated)
-		TailHitResult hit = GetTailCollisionVictim(o); 
+		TailHitResult hit = GetTailCollisionVictim(o);
 
 		// Process Tail Hit Result
 		if (hit.victim && !markedForDeath)
@@ -316,7 +320,7 @@ void GameManager::HandleCollisions()
 				}
 
 				// Play sound effect
-				if (audioInitialized_) PlaySound(fxSlice_); 
+				if (audioInitialized_) PlaySound(fxSlice_);
 			}
 			else
 			{
@@ -385,9 +389,7 @@ void GameManager::UpdateMenu()
 		MenuAlpha = 1.0f;
 	}
 
-
-
-	// PLAYER BIKE SELECTION 
+	// PLAYER BIKE SELECTION
 	// Helper Lambda to cycle bikes safely
 	auto CycleBike = [&](int playerIndex, int direction)
 		{
@@ -444,7 +446,7 @@ void GameManager::UpdateMenu()
 	}
 
 	// Input Toggle difficulty (TAB Key)
-	if (IsKeyPressed(KEY_TAB)) 
+	if (IsKeyPressed(KEY_TAB))
 	{
 		int d = (int)difficulty_;
 		d++;
@@ -499,7 +501,7 @@ void GameManager::UpdateGameOver()
 	if (IsKeyPressed(KEY_SPACE))
 	{
 		ResetPlayers(selectedPlayers_);
-		
+
 		mapGen_.GenerateMap(selectedMapType_, screenWidth_, screenHeight_);
 
 		gameState_ = gameState::Running;
@@ -518,12 +520,18 @@ void GameManager::UpdateGameOver()
 		UpdateMusicStream(bgmTracks_[currentTrackIndex_]);
 		SetMusicVolume(bgmTracks_[currentTrackIndex_], 0.5f);
 	}
-		
 }
 
-// Helper RunningState Logic 
+// Helper RunningState Logic
 void GameManager::UpdateRunning(float dt)
 {
+	// Countdown Logic  to freeze game at start
+	if (startDelayTimer_ > 0.0f)
+	{
+		startDelayTimer_ -= dt;
+		return;
+	}
+
 	// Stats Tracking (Solo)
 	if (selectedPlayers_ == 1 && playerOne_.IsAlive())
 	{
@@ -533,7 +541,7 @@ void GameManager::UpdateRunning(float dt)
 
 	// Sub-Systems
 	UpdatePowerups(dt);
-	UpdateSoloAI(dt); 
+	UpdateSoloAI(dt);
 
 	// Update All Entities (Movement/Steering)
 	for (ITailOwner* o : owners_) o->OwnerUpdate(dt);
@@ -561,7 +569,6 @@ void GameManager::UpdateRunning(float dt)
 		UpdateMusicStream(bgmTracks_[currentTrackIndex_]);
 		SetMusicVolume(bgmTracks_[currentTrackIndex_], 1.0f);
 	}
-		
 }
 
 // Update power-up system
@@ -575,14 +582,14 @@ void GameManager::UpdatePowerups(float dt)
 
 		if (powerups_.size() < maxPowerups)
 		{
-		SpawnPowerUp();
-		// Chaos Mode: 50% chance for double spawn
-		// Check size again to strictly enforce the limit
-		if (difficulty_ == Difficulty::Chaos &&	powerups_.size() < maxPowerups && GetRandomValue(0, 100) > 50)
-		{
 			SpawnPowerUp();
+			// Chaos Mode: 50% chance for double spawn
+			// Check size again to strictly enforce the limit
+			if (difficulty_ == Difficulty::Chaos && powerups_.size() < maxPowerups && GetRandomValue(0, 100) > 50)
+			{
+				SpawnPowerUp();
+			}
 		}
-	}
 
 		// Reset Timer
 		float minTime = 5.0f, maxTime = 10.0f;
@@ -630,10 +637,10 @@ void GameManager::UpdatePowerups(float dt)
 							// Ghost mode sound
 							PlaySound(fxGhost_);
 						}
-						else 
-						{ 
+						else
+						{
 							// Other power-ups
-							PlaySound(fxPowerup_); 
+							PlaySound(fxPowerup_);
 						}
 					}
 				}
@@ -692,7 +699,7 @@ void GameManager::UpdateSoloAI(float dt)
 		hardModeTimer_ -= dt;
 		if (hardModeTimer_ <= 0.0f)
 		{
-			// CAP LOGIC 
+			// CAP LOGIC
 			int maxEnemies = 2; // Hard Mode Limit
 			if (difficulty_ == Difficulty::Chaos) maxEnemies = 10; // Chaos Limit
 
@@ -817,7 +824,7 @@ void GameManager::DrawMenu()
 	// Draw the map with the configured style
 	mapGen_.Draw(gridColor, pulse);
 
-	Color dimColor = Fade(BLACK, 0.85f); // Default
+	Color dimColor = Fade(BLACK, 0.3f); // Default
 
 	if (difficulty_ == Difficulty::Hard)
 	{
@@ -866,16 +873,26 @@ void GameManager::DrawMenu()
 		break;
 	case Difficulty::Chaos:
 		diffText = "DIFFICULTY: CHAOS";
-		diffColor = PURPLE; 
+		diffColor = PURPLE;
 		break;
 	}
 
 	DrawText(diffText, (screenWidth_ - MeasureText(diffText, 30)) / 2, 130, 30, diffColor);
 	DrawText("(PRESS TAB)", (screenWidth_ - MeasureText("(PRESS TAB)", 30)) / 2, 160, 30, DARKGRAY);
 
-
 	// Title
 	DrawText("VECTOR CLASH", (screenWidth_ - MeasureText("VECTOR CLASH", 80)) / 2, 50, 80, MAROON);
+
+	const char* line0 = "HOW TO PLAY:";
+	const char* line1 = "Steer your bike to avoid walls and trails.";
+	const char* line2 = "Cut off opponents to make them crash. Last survivor wins.";
+	const char* line3 = "Use powerups to gain speed, phase through walls, or cut trails";
+
+	int tutSize = 30;
+	DrawText(line0, (screenWidth_ - MeasureText(line0, tutSize)) / 2, 800, tutSize, GRAY);
+	DrawText(line1, (screenWidth_ - MeasureText(line1, tutSize)) / 2, 830, tutSize, GRAY);
+	DrawText(line2, (screenWidth_ - MeasureText(line2, tutSize)) / 2, 855, tutSize, GRAY);
+	DrawText(line3, (screenWidth_ - MeasureText(line3, tutSize)) / 2, 880, tutSize, GRAY);
 
 	// Player count info
 	std::string countText = "PLAYERS: < " + std::to_string(selectedPlayers_) + " >  (UP/DOWN)";
@@ -908,8 +925,8 @@ void GameManager::DrawMenu()
 	// Player Slots Layout Configuration
 	int boxWidth = 300;
 	int boxHeight = 250;
-	int gap = 40;        
-	int startY = 350;    
+	int gap = 40;
+	int startY = 350;
 
 	// Total Width = (4 boxes) + (3 gaps between them)
 	int totalGroupWidth = (4 * boxWidth) + (3 * gap);
@@ -946,7 +963,7 @@ void GameManager::DrawMenu()
 		{
 			// Get the Data for this Player's selected bike
 			BikeType type = playerLoadouts_[i];
-			BikeConfig stats = GetBikeStats(type); 
+			BikeConfig stats = GetBikeStats(type);
 
 			// Draw Class Name (Centered)
 			std::string className;
@@ -985,9 +1002,9 @@ void GameManager::DrawMenu()
 		}
 	}
 
-	// Powerup Legend 
+	// Powerup Legend
 	int legY = 750;
-	int pSize = 30; 
+	int pSize = 30;
 	int legGap = 300;
 
 	// Calculate total width to center the legend
@@ -1014,7 +1031,6 @@ void GameManager::DrawMenu()
 	// Cutter (Gold)
 	DrawLegendItem(legendStartX + (legGap * 3), GOLD, "Tail Cutter");
 
-
 	// Bottom Instructions (Press Start)
 	const char* instr = "PRESS [ENTER]/[SPACE] TO START";
 	// Pulse effect
@@ -1022,7 +1038,6 @@ void GameManager::DrawMenu()
 	DrawText(instr, (screenWidth_ - MeasureText(instr, 30)) / 2, screenHeight_ - 400, 30, startColor);
 
 	DrawFadeOverlay();
-
 }
 
 //helper to fadein menu
@@ -1054,7 +1069,7 @@ void GameManager::DrawRunning()
 	else if (difficulty_ == Difficulty::Chaos)
 	{
 		// Chaos mode = Pulsating Maroon
-		gridColor =MAROON;
+		gridColor = MAROON;
 		pulse = true;
 	}
 
@@ -1066,6 +1081,35 @@ void GameManager::DrawRunning()
 
 	// Draw entities (Players + Enemies)
 	for (ITailOwner* o : owners_) o->OwnerDraw();
+
+	// Countdown overlay, shows a countdown to game start and draws p1-p4 labels
+	if (startDelayTimer_ > 0.0f)
+	{
+		// Draw Big Countdown Number
+		std::string countText = std::to_string((int)ceil(startDelayTimer_));
+		int fontSize = 160;
+		int textW = MeasureText(countText.c_str(), fontSize);
+		DrawText(countText.c_str(), (screenWidth_ - textW) / 2, (screenHeight_ / 2) - 100, fontSize, RAYWHITE);
+
+		const char* readyText = "GET READY";
+		int readyW = MeasureText(readyText, 60);
+		DrawText(readyText, (screenWidth_ - readyW) / 2, (screenHeight_ / 2) + 60, 60, YELLOW);
+
+		// Draw Player Labels 
+		auto DrawID = [&](mPlayer& p, std::string label) {
+			if (!p.IsAlive()) return;
+			Vector2 pos = p.GetPosition();
+			DrawText(label.c_str(), (int)pos.x - 10, (int)pos.y - 60, 40, p.IsAlive() ? WHITE : GRAY);
+			DrawCircle((int)pos.x, (int)pos.y - 15, 5.0f, WHITE); 
+			};
+
+		// Check active players and label them
+		// We check selectedPlayers_ to ensure we only draw active ones
+		DrawID(playerOne_, "P1");
+		if (selectedPlayers_ >= 2) DrawID(playerTwo_, "P2");
+		if (selectedPlayers_ >= 3) DrawID(playerThree_, "P3");
+		if (selectedPlayers_ >= 4) DrawID(playerFour_, "P4");
+	}
 
 	// HUD / Debug Overlay
 	// Show duped count in HUD for Solo
@@ -1185,7 +1229,7 @@ void GameManager::DrawGameOver()
 }
 
 // Draw intro screen
-void GameManager::DrawIntro() 
+void GameManager::DrawIntro()
 {
 	float alpha = 0.0f;
 	float delayTime = 2.0f;
@@ -1200,7 +1244,7 @@ void GameManager::DrawIntro()
 	// Fade in
 	if (introTimer_ <= (delayTime + fadeTime))
 	{
-		alpha = (introTimer_ - delayTime)/ fadeTime ;
+		alpha = (introTimer_ - delayTime) / fadeTime;
 	}
 
 	// Fade out
@@ -1212,7 +1256,6 @@ void GameManager::DrawIntro()
 	// Clamp alpha between 0 and 1
 	if (alpha < 0.0f) alpha = 0.0f;
 	if (alpha > 1.0f) alpha = 1.0f;
-
 
 	// Draw fading title
 	Color fadeColor = Fade(RED, alpha);
@@ -1331,7 +1374,6 @@ GameManager::~GameManager()
 		UnloadSound(fxSlice_);
 		UnloadSound(fxIntroSound_);
 		UnloadSound(fxGameWinSound_);
-
 
 		CloseAudioDevice();
 		audioInitialized_ = false;

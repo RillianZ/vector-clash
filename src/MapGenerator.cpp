@@ -87,8 +87,8 @@ void MapGenerator::GenerateMap(MapType type, int screenWidth, int screenHeight)
 	case MapType::Grid:
 		GenerateGridMap(screenWidth, screenHeight);
 		break;
-	case MapType::Chaos: 
-		GenerateChaosMap(screenWidth, screenHeight); 
+	case MapType::Chaos:
+		GenerateChaosMap(screenWidth, screenHeight);
 		break;
 	}
 
@@ -114,7 +114,6 @@ void MapGenerator::GenerateFixedMap(int screenW, int screenH)
 	obstacles_.push_back({ midX + offset - wallSize, midY + offset - wallSize, wallSize, wallSize });
 }
 
-//considering adding more waves on hard mode
 // Wave map with procedurally generated wavy walls using teacher taught Vector2D class
 // Since CosineMovement modifies X based on an angle, we step down Y and calculate X using the class.
 void MapGenerator::GenerateWaveMap(int screenW, int screenH)
@@ -202,7 +201,7 @@ void MapGenerator::GenerateDonutMap(int screenW, int screenH)
 	obstacles_.push_back({ midX - (size / 2), midY - (size / 2), size, size });
 }
 
-// Grid map made of boxes 
+// Grid map made of boxes
 void MapGenerator::GenerateGridMap(int screenW, int screenH)
 {
 	int rows = 4;
@@ -253,7 +252,6 @@ void MapGenerator::GenerateChaosMap(int screenW, int screenH)
 		float x = (float)GetRandomValue(100, screenW - 100 - (int)w);
 		float y = (float)GetRandomValue(100, screenH - 100 - (int)h);
 
-		
 		// Define new wall and safe zone rectangles to avoid spawning in center
 		Rectangle newWall = { x, y, w, h };
 		Rectangle safeZone = { (float)screenW / 2 - 200, (float)screenH / 2 - 200, 400, 400 };

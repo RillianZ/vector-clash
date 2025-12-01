@@ -171,16 +171,15 @@ void mPlayer::Update(float deltaTime)
 	}
 	else if (speed_ < 190)
 	{
-		trailSampleDistance_ = 2.0f; 
+		trailSampleDistance_ = 2.0f;
 	}
 	else
 	{
-		trailSampleDistance_ = 3.0f; 
+		trailSampleDistance_ = 3.0f;
 	}
 
 	// Delegate the heavy lifting to the parent class!
 	UpdateTailLogic(position_);
-
 }
 
 // Simple rectangle of the player's head (for collision checks)
@@ -223,7 +222,7 @@ void mPlayer::Draw()
 
 	// identidy border
 	float borderThickness = 6.0f;
-	Rectangle borderRec = 
+	Rectangle borderRec =
 	{
 		position_.x, position_.y,
 		size_.x + borderThickness, size_.y + borderThickness

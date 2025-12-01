@@ -60,7 +60,7 @@ public:
 		if (tailLengthPixels_ < 20.0f) tailLengthPixels_ = 20.0f;
 	}
 
-protected: 
+protected:
 
 	// Shared tail data
 	std::deque<Vector2> tailSegments_;
@@ -69,7 +69,7 @@ protected:
 	float tailLengthPixels_ = 200.0f;
 
 	// distance between tail samples
-	float trailSampleDistance_ = 3.0f; 
+	float trailSampleDistance_ = 3.0f;
 
 	// max tail segments to store
 	size_t maxTrailPoints_ = 0;
@@ -95,7 +95,7 @@ protected:
 		}
 		else
 		{
-			// update the very last point to the current position 
+			// update the very last point to the current position
 			tailSegments_.back() = currentPos;
 		}
 

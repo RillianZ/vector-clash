@@ -56,13 +56,13 @@ void Enemy::Reset(Vector2 startPos)
 
 	// Reset angle (90 = Down)
 	currentAngle_ = 90.0f;
-	
+
 	// Set alive
 	isAlive_ = true;
 
 	// Reset tail length parameters
 	tailLengthPixels_ = 200.0f;
-	
+
 	// Reset trail history (Parent Helper)
 	ResetTail({ position_.x, position_.y });
 }
@@ -209,7 +209,6 @@ void Enemy::OwnerUpdate(float dt)
 
 	// Parent class helper to update tail segments
 	UpdateTailLogic({ position_.x, position_.y });
-	
 }
 
 // Draw owner (tail + head)
@@ -275,7 +274,7 @@ Vector2 Enemy::GetSize() const
 // Sets the enemy speed (and scales turn speed to match agility)
 void Enemy::SetSpeed(float newSpeed)
 {
-	// Calculate the ratio of change 
+	// Calculate the ratio of change
 	float ratio = newSpeed / speed_;
 
 	//Apply to speed

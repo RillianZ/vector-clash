@@ -12,7 +12,7 @@ class mPlayer : public ITailOwner
 {
 public:
 	// Constructor accepts optional per-instance keys
-	mPlayer(Vector2 pStartPos, BikeConfig config, int pKeyLeft , int pKeyRight, float startAngle, Color idColor);
+	mPlayer(Vector2 pStartPos, BikeConfig config, int pKeyLeft, int pKeyRight, float startAngle, Color idColor);
 
 	void HandleInput(float deltaTime); // Handles player input for rotation
 	void Update(float deltaTime); // Updates the player position and trail
@@ -50,15 +50,15 @@ public:
 	bool IsPhasing() const;     // For Ghost Mode (ignores collisions)
 	bool HasTailCutter() const; // For Cutter Mode
 	void ConsumeTailCutter();   // Uses up the cutter charge
-	void ClearTail();
+	void ClearTail(); // Clears the tail segments
 
 	// Simple rectangle of the player's head (for collision checks)
 	Rectangle GetRect() const;
 
 private:
-
+	// Sets bike type and updates stats accordingly
 	BikeType type_;
-	
+
 	// Direction angle in degrees (0 = right, 90 = down, etc.)
 	float directionAngle_;
 
