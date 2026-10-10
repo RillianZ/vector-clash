@@ -413,3 +413,5 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+# Local save file (personal bests)
+vector_clash_save.txt
