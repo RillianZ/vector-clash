@@ -63,6 +63,6 @@ src/Vector2D.*         my own 2D vector math (normalize, rotate, sine and cosine
 
 ## Notes
 
-The browser version on my site is a port of this code with a couple of extras (gamepad support and a longer spawn shield). The music is free to use tracks I downloaded.
+The browser version on my site is a port of this code with a couple of extras (gamepad support and a 4 second spawn shield). That build is in [`web/VectorClash-web.zip`](web/VectorClash-web.zip). Unzip it and serve the folder with any local web server, or upload it to itch.io as an HTML game. The music is free to use tracks I downloaded.
 
 Made by Noah Sund, [Sund Origin Studio](https://sundorigin.org).
