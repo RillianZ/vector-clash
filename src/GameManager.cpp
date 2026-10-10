@@ -2,6 +2,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <string>
+#include <algorithm>
 #include "Vector2D.h"
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
