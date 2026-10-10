@@ -20,7 +20,7 @@ I made it for my Programming 1 exam at INN (autumn 2025). C++ and raylib, my own
 - **6 maps.** Clean, Fixed, Wave (sine waves), Donut, Grid and Chaos (new random obstacles every round)
 - **4 difficulties.** Easy, Normal, Hard and Chaos
 - **Power ups.** Speed boost, a fake one that slows you down (sorry), Ghost mode to phase through trails, and Tail Cutter
-- 6 music tracks, spawn protection with a countdown, solo high scores saved to a file
+- Gamepad support, 6 music tracks, a spawn shield after the countdown, solo high scores saved to a file
 
 ## Controls
 
@@ -43,6 +43,8 @@ In the menu:
 | Enter / Space | Start |
 | Space / Enter on game over | Play again / back to menu |
 
+**Gamepads:** gamepad 1 steers player 1 and so on (d-pad or left stick). In the menu A or Start starts, d-pad up/down sets players, X changes difficulty, Y changes map, Back changes music and LB/RB pick your bike. On game over A retries and B goes back to the menu.
+
 ## Build it
 
 **Windows, Visual Studio:** open `VectorClash.sln` and press F5. raylib is in `lib/`. Music and sounds load from `resources/`, so run it from the project folder (the default in Visual Studio) or put `resources/` next to the exe.
@@ -63,6 +65,10 @@ src/Vector2D.*         my own 2D vector math (normalize, rotate, sine and cosine
 
 ## Notes
 
-The browser version on my site is a port of this code with a couple of extras (gamepad support and a 4 second spawn shield). That build is in [`web/VectorClash-web.zip`](web/VectorClash-web.zip). Unzip it and serve the folder with any local web server, or upload it to itch.io as an HTML game. The music is free to use tracks I downloaded.
+This is the newest version of the code. On top of the exam version it has gamepad support (pad N steers player N) and a 4 second spawn shield that starts after the GET READY countdown. The browser parts only switch on when you build with `PLATFORM_WEB`, so the same code builds for Windows too. All changes are marked `// [web-port]` or `// [gamepad]`, and [`web/WEB-PORT-NOTES.md`](web/WEB-PORT-NOTES.md) explains them plus the web build command.
+
+The exact version I handed in for the exam is on the [`2025-exam`](https://github.com/RillianZ/vector-clash/tree/2025-exam) branch.
+
+The ready to play browser build is in [`web/VectorClash-web.zip`](web/VectorClash-web.zip). Unzip it and serve the folder with any local web server, or upload it to itch.io as an HTML game. The music is free to use tracks I downloaded.
 
 Made by Noah Sund, [Sund Origin Studio](https://sundorigin.org).

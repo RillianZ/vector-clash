@@ -43,6 +43,9 @@ public:
 	// Sets the control keys for the player
 	void SetControlKeys(int leftKey, int rightKey);
 
+	// [gamepad] Which gamepad steers this player (-1 = keyboard only)
+	void SetGamepad(int index) { gamepad_ = index; }
+
 	// Power-up application
 	void ApplyPowerUp(PowerUpType type);
 
@@ -79,6 +82,7 @@ private:
 	// Per-instance control keys
 	int keyLeft_;
 	int keyRight_;
+	int gamepad_ = -1; // [gamepad]
 
 	// Power-up states
 	float speedTimer_;

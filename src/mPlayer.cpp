@@ -1,5 +1,6 @@
 #include "mPlayer.h"
 #include "raymath.h"
+#include <cmath>
 
 //Constructor implement : can accept custom control
 mPlayer::mPlayer(Vector2 startPos, BikeConfig config, int keyLeft, int keyRight, float startAngle, Color idColor)
@@ -127,6 +128,19 @@ void mPlayer::HandleInput(float deltaTime)
 	if (IsKeyDown(keyRight_))
 	{
 		directionAngle_ += rotationSpeed_ * deltaTime;
+	}
+
+	// [gamepad] D-pad steers at full rate, left stick steers proportionally (same max turn rate as keys)
+	if (gamepad_ >= 0 && IsGamepadAvailable(gamepad_))
+	{
+		float steer = 0.0f;
+		if (IsGamepadButtonDown(gamepad_, GAMEPAD_BUTTON_LEFT_FACE_LEFT))  steer -= 1.0f;
+		if (IsGamepadButtonDown(gamepad_, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) steer += 1.0f;
+		float stick = GetGamepadAxisMovement(gamepad_, GAMEPAD_AXIS_LEFT_X);
+		if (fabsf(stick) > 0.25f) steer += (stick - (stick > 0 ? 0.25f : -0.25f)) / 0.75f;
+		if (steer > 1.0f) steer = 1.0f;
+		if (steer < -1.0f) steer = -1.0f;
+		directionAngle_ += steer * rotationSpeed_ * deltaTime;
 	}
 }
 

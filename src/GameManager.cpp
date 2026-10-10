@@ -3,6 +3,25 @@
 #include <cmath>
 #include <string>
 #include "Vector2D.h"
+#if defined(PLATFORM_WEB)
+#include <emscripten/emscripten.h>
+#endif
+
+// [gamepad] true if any connected gamepad pressed this button this frame
+static bool AnyPadPressed(int button)
+{
+	for (int i = 0; i < 4; i++)
+		if (IsGamepadAvailable(i) && IsGamepadButtonPressed(i, button)) return true;
+	return false;
+}
+
+#if defined(PLATFORM_WEB)
+// [web-port] Music is streamed in by the web page after the game starts, so the first
+// download stays small. Tracks appear in the virtual file system one by one, in order.
+static const char* kBgmPaths[6] = {
+	"resources/background.mp3", "resources/background2.mp3", "resources/background3.mp3",
+	"resources/background4.mp3", "resources/background5.mp3", "resources/background6.mp3" };
+#endif
 
 // Main Constructor
 GameManager::GameManager(int screenWidth, int screenHeight)
@@ -10,7 +29,7 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	, screenHeight_(screenHeight) // for use in various calculations
 	, halfScreenWidth_((float)screenWidth / 2.0f) // such as centering players
 	, halfScreenHeight_((float)screenHeight / 2.0f) // and enemy spawn positions
-	, spawnInvulnerableSeconds_(1.f) // increase this to avoid instant self-hits at spawn
+	, spawnInvulnerableSeconds_(4.f) // spawn protection: 4 s after GET READY ends (was 1 s and ran out during the countdown)
 	, spawnInvulnerableTimer_(0.0f) // initialized to 0
 	, gameState_(gameState::Intro) // start in Menu state
 	, selectedPlayers_(1) //default to 1 for quicker testing
@@ -42,6 +61,12 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	// intialize player wins vector
 	playerWins_ = { 0, 0, 0, 0 };
 
+	// [gamepad] gamepad N steers player N+1
+	playerOne_.SetGamepad(0);
+	playerTwo_.SetGamepad(1);
+	playerThree_.SetGamepad(2);
+	playerFour_.SetGamepad(3);
+
 	// initialize players and owners according to selectedPlayers_
 	ResetPlayers(selectedPlayers_);
 
@@ -50,6 +75,7 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 	audioInitialized_ = IsAudioDeviceReady();
 	if (audioInitialized_)
 	{
+#if !defined(PLATFORM_WEB)
 		// Load 3 tracks
 		bgmTracks_.push_back(LoadMusicStream("resources/background.mp3"));
 		bgmTracks_.push_back(LoadMusicStream("resources/background2.mp3"));
@@ -63,6 +89,7 @@ GameManager::GameManager(int screenWidth, int screenHeight)
 			PlayMusicStream(bgmTracks_[0]);
 			hasBgm_ = true;
 		}
+#endif
 
 		// Load sound effects
 		fxMenuDing_ = LoadSound("resources/menu_ding.mp3");
@@ -349,8 +376,25 @@ void GameManager::HandleCollisions()
 // Main per-frame update function
 void GameManager::Update(float dt)
 {
-	// Global: countdown spawn invul timer if active
-	if (spawnInvulnerableTimer_ > 0.0f) spawnInvulnerableTimer_ -= dt;
+	// Spawn protection now counts down in UpdateRunning, after the GET READY countdown
+
+#if defined(PLATFORM_WEB)
+	// [web-port] pick up music tracks as the page finishes downloading them
+	if (audioInitialized_ && bgmTracks_.size() < 6 && FileExists(kBgmPaths[bgmTracks_.size()]))
+	{
+		Music m = LoadMusicStream(kBgmPaths[bgmTracks_.size()]);
+		if (IsMusicReady(m))
+		{
+			bgmTracks_.push_back(m);
+			if (bgmTracks_.size() == 1)
+			{
+				SetMusicVolume(bgmTracks_[0], 0.5f);
+				PlayMusicStream(bgmTracks_[0]);
+				hasBgm_ = true;
+			}
+		}
+	}
+#endif
 
 	// Delegate to helpers via state machine
 	switch (gameState_)
@@ -406,6 +450,14 @@ void GameManager::UpdateMenu()
 			changed = true;
 		};
 
+	// [gamepad] each pad cycles its own player's bike with D-pad left/right or the bumpers
+	for (int i = 0; i < 4; i++)
+	{
+		if (!IsGamepadAvailable(i)) continue;
+		if (IsGamepadButtonPressed(i, GAMEPAD_BUTTON_LEFT_FACE_LEFT) || IsGamepadButtonPressed(i, GAMEPAD_BUTTON_LEFT_TRIGGER_1))  CycleBike(i, -1);
+		if (IsGamepadButtonPressed(i, GAMEPAD_BUTTON_LEFT_FACE_RIGHT) || IsGamepadButtonPressed(i, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) CycleBike(i, 1);
+	}
+
 	// Player 1 (Arrows)
 	if (IsKeyPressed(KEY_LEFT))  CycleBike(0, -1);
 	if (IsKeyPressed(KEY_RIGHT)) CycleBike(0, 1);
@@ -423,19 +475,19 @@ void GameManager::UpdateMenu()
 	if (IsKeyPressed(KEY_L)) CycleBike(3, 1);
 
 	// Player Count (Up / Down)
-	if (IsKeyPressed(KEY_UP))
+	if (IsKeyPressed(KEY_UP) || AnyPadPressed(GAMEPAD_BUTTON_LEFT_FACE_UP))
 	{
 		selectedPlayers_ = std::min(4, selectedPlayers_ + 1);
 		changed = true;
 	}
-	if (IsKeyPressed(KEY_DOWN))
+	if (IsKeyPressed(KEY_DOWN) || AnyPadPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN))
 	{
 		selectedPlayers_ = std::max(1, selectedPlayers_ - 1);
 		changed = true;
 	}
 
 	// Map Selection (M Key), cycles forward and shows immediate preview
-	if (IsKeyPressed(KEY_M))
+	if (IsKeyPressed(KEY_M) || AnyPadPressed(GAMEPAD_BUTTON_RIGHT_FACE_UP))
 	{
 		int type = (int)selectedMapType_ + 1;
 		if (type >= (int)MapType::Count) type = 0;
@@ -446,7 +498,7 @@ void GameManager::UpdateMenu()
 	}
 
 	// Input Toggle difficulty (TAB Key)
-	if (IsKeyPressed(KEY_TAB))
+	if (IsKeyPressed(KEY_TAB) || AnyPadPressed(GAMEPAD_BUTTON_RIGHT_FACE_LEFT))
 	{
 		int d = (int)difficulty_;
 		d++;
@@ -456,7 +508,7 @@ void GameManager::UpdateMenu()
 	}
 
 	// CHANGE MUSIC TRACK (T)
-	if (IsKeyPressed(KEY_T) && hasBgm_)
+	if ((IsKeyPressed(KEY_T) || AnyPadPressed(GAMEPAD_BUTTON_MIDDLE_LEFT)) && hasBgm_)
 	{
 		// Stop current
 		StopMusicStream(bgmTracks_[currentTrackIndex_]);
@@ -477,7 +529,7 @@ void GameManager::UpdateMenu()
 	if (changed && audioInitialized_) PlaySound(fxMenuDing_);
 
 	// Start Game
-	if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+	if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || AnyPadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || AnyPadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT))
 	{
 		if (audioInitialized_) PlaySound(fxMenuSelect_);
 		ResetPlayers(selectedPlayers_);
@@ -498,7 +550,7 @@ void GameManager::UpdateMenu()
 // Helper Game Over Logic
 void GameManager::UpdateGameOver()
 {
-	if (IsKeyPressed(KEY_SPACE))
+	if (IsKeyPressed(KEY_SPACE) || AnyPadPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || AnyPadPressed(GAMEPAD_BUTTON_MIDDLE_RIGHT))
 	{
 		ResetPlayers(selectedPlayers_);
 
@@ -507,7 +559,7 @@ void GameManager::UpdateGameOver()
 		gameState_ = gameState::Running;
 		winner_ = 0;
 	}
-	else if (IsKeyPressed(KEY_ENTER))
+	else if (IsKeyPressed(KEY_ENTER) || AnyPadPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT) || AnyPadPressed(GAMEPAD_BUTTON_MIDDLE_LEFT))
 	{
 		gameState_ = gameState::Menu;
 		UpdateMenuTimer = 0.0f;
@@ -531,6 +583,9 @@ void GameManager::UpdateRunning(float dt)
 		startDelayTimer_ -= dt;
 		return;
 	}
+
+	// Spawn protection counts down only once everyone is moving
+	if (spawnInvulnerableTimer_ > 0.0f) spawnInvulnerableTimer_ -= dt;
 
 	// Stats Tracking (Solo)
 	if (selectedPlayers_ == 1 && playerOne_.IsAlive())
@@ -558,6 +613,24 @@ void GameManager::UpdateRunning(float dt)
 	if (spawnInvulnerableTimer_ <= 0.0f)
 	{
 		HandleCollisions();
+	}
+	else
+	{
+		// While protected, walls/blocks/trails can't kill you, but leaving the arena still does
+		// (otherwise a fast bike could drive straight out through the border during the 4 s)
+		std::vector<ITailOwner*> outside;
+		for (ITailOwner* o : owners_)
+		{
+			if (!o->IsAlive()) continue;
+			Vector2 p = o->GetPosition();
+			if (p.x < 0.0f || p.y < 0.0f || p.x > (float)screenWidth_ || p.y > (float)screenHeight_) outside.push_back(o);
+		}
+		for (ITailOwner* o : outside)
+		{
+			o->OwnerKill();
+			if (selectedPlayers_ == 1 && o != &playerOne_) enemiesDupedCurrent_++;
+		}
+		if (!outside.empty() && audioInitialized_) PlaySound(fxCrash_);
 	}
 
 	// Check Win Conditions
@@ -991,6 +1064,14 @@ void GameManager::DrawMenu()
 			// Draw Controls
 			int keyW = MeasureText(keys[i], 20);
 			DrawText(keys[i], x + (boxWidth - keyW) / 2, y + boxHeight - 40, 20, LIGHTGRAY);
+
+			// [gamepad] show when this player's pad is connected
+			if (IsGamepadAvailable(i))
+			{
+				std::string padText = "+ GAMEPAD " + std::to_string(i + 1);
+				int padW = MeasureText(padText.c_str(), 20);
+				DrawText(padText.c_str(), x + (boxWidth - padW) / 2, y + boxHeight - 70, 20, idColors[i]);
+			}
 		}
 		else
 		{
@@ -1030,6 +1111,13 @@ void GameManager::DrawMenu()
 
 	// Cutter (Gold)
 	DrawLegendItem(legendStartX + (legGap * 3), GOLD, "Tail Cutter");
+
+	// [gamepad] controls hint, only when a pad is plugged in
+	if (IsGamepadAvailable(0) || IsGamepadAvailable(1) || IsGamepadAvailable(2) || IsGamepadAvailable(3))
+	{
+		const char* padHelp = "GAMEPAD: A/START = start   D-PAD/LB/RB = bike   UP/DOWN = players   X = difficulty   Y = map   BACK = music";
+		DrawText(padHelp, (screenWidth_ - MeasureText(padHelp, 20)) / 2, screenHeight_ - 350, 20, LIGHTGRAY);
+	}
 
 	// Bottom Instructions (Press Start)
 	const char* instr = "PRESS [ENTER]/[SPACE] TO START";
@@ -1081,6 +1169,21 @@ void GameManager::DrawRunning()
 
 	// Draw entities (Players + Enemies)
 	for (ITailOwner* o : owners_) o->OwnerDraw();
+
+	// Spawn protection indicator: pulsing ring around every head + "SHIELD" countdown
+	if (startDelayTimer_ <= 0.0f && spawnInvulnerableTimer_ > 0.0f)
+	{
+		float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 12.0f);
+		for (ITailOwner* o : owners_)
+		{
+			if (!o->IsAlive()) continue;
+			Vector2 p = o->GetPosition();
+			float r = std::max(o->GetSize().x, o->GetSize().y) + 8.0f + 4.0f * pulse;
+			DrawCircleLines((int)p.x, (int)p.y, r, Fade(RAYWHITE, 0.35f + 0.5f * pulse));
+		}
+		std::string shield = "SPAWN SHIELD " + std::to_string((int)ceilf(spawnInvulnerableTimer_));
+		DrawText(shield.c_str(), (screenWidth_ - MeasureText(shield.c_str(), 30)) / 2, 50, 30, Fade(RAYWHITE, 0.6f + 0.4f * pulse));
+	}
 
 	// Countdown overlay, shows a countdown to game start and draws p1-p4 labels
 	if (startDelayTimer_ > 0.0f)
@@ -1280,6 +1383,12 @@ void GameManager::DrawIntro()
 // save high scores to file
 void GameManager::SaveHighScores()
 {
+#if defined(PLATFORM_WEB)
+	// [web-port] browsers have no save file; keep the bests in localStorage instead
+	EM_ASM({ try { localStorage.setItem('vector-clash-best', $0 + ' ' + $1 + ' ' + $2); } catch (e) {} },
+		bestSurvivalTime_, bestSoloTailLength_, enemiesDupedBest_);
+	return;
+#endif
 	std::ofstream file(saveFileName_);
 	if (file.is_open())
 	{
@@ -1294,6 +1403,16 @@ void GameManager::SaveHighScores()
 // Load high scores from file
 void GameManager::LoadHighScores()
 {
+#if defined(PLATFORM_WEB)
+	// [web-port] read the bests back from localStorage (missing/bad values stay at 0)
+	double t = EM_ASM_DOUBLE({ try { var v = (localStorage.getItem('vector-clash-best') || '').split(' '); return +v[$0] || 0; } catch (e) { return 0; } }, 0);
+	double l = EM_ASM_DOUBLE({ try { var v = (localStorage.getItem('vector-clash-best') || '').split(' '); return +v[$0] || 0; } catch (e) { return 0; } }, 1);
+	double d = EM_ASM_DOUBLE({ try { var v = (localStorage.getItem('vector-clash-best') || '').split(' '); return +v[$0] || 0; } catch (e) { return 0; } }, 2);
+	bestSurvivalTime_ = (float)t;
+	bestSoloTailLength_ = (float)l;
+	enemiesDupedBest_ = (int)d;
+	return;
+#endif
 	std::ifstream file(saveFileName_);
 	if (file.is_open())
 	{

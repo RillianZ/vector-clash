@@ -12,6 +12,10 @@ int main()
 	//int screenHeight = 1080;
 	InitWindow(screenWidth, screenHeight, "Vector Clash");
 	SetTargetFPS(60);
+#if defined(PLATFORM_WEB)
+	// [web-port] Esc would end the main loop and freeze the page, so it does nothing in the browser
+	SetExitKey(KEY_NULL);
+#endif
 
 	GameManager gm(screenWidth, screenHeight);
 
